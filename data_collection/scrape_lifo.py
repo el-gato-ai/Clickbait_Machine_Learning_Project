@@ -28,9 +28,9 @@ def fetch_html(url: str) -> str | None:
 def parse_mostpopular_page(html: str, known_titles: set) -> list[dict]:
     """
     Παίρνει HTML από μια σελίδα mostpopular και επιστρέφει unique records:
-      - section
-      - title
-      - clickbait = 1
+        - section
+        - title
+        - clickbait = 1
     Αποφεύγει duplicates χρησιμοποιώντας το known_titles set.
     """
 
@@ -55,17 +55,13 @@ def parse_mostpopular_page(html: str, known_titles: set) -> list[dict]:
 
             raw_text = a.get_text(" ", strip=True)
 
-            # Κόβουμε την ημερομηνία/ώρα στο τέλος (με βάση '|')
             title_part = raw_text.rsplit("|", maxsplit=1)[0].strip()
             title = title_part
 
-            # --- ΑΠΟΦΥΓΗ DUPLICATES ---
             normalized = title.lower().strip()
             if normalized in known_titles:
-                # skip αν υπάρχει ήδη
                 continue
 
-            # αν δεν υπάρχει, αποθήκευσέ το
             known_titles.add(normalized)
 
             records.append(
@@ -88,7 +84,7 @@ def scrape_lifo_mostpopular():
     ]
 
     all_records = []
-    known_titles = set()   # <-- εδώ κρατάμε όλους τους unique τίτλους
+    known_titles = set()
 
     for url in urls:
         print(f"[INFO] Fetching {url}")
