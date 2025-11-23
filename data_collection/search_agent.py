@@ -125,7 +125,7 @@ INSTRUCTIONS:
 """
 
 
-EXCEL_PATH = "../data/greek_news.xlsx"
+EXCEL_PATH = "../data/custom/greek_news.xlsx"
 
 
 def append_news_to_excel(response: NewsResponse, query: str, excel_path = EXCEL_PATH) -> int:
@@ -245,10 +245,7 @@ def stream_greek_news_agent(query: str) -> NewsResponse:
     Stream agent progress to CLI for a single query.
     Excel append is handled automatically by @after_model middleware.
     """
-    if thread_id is None:
-        thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
-    
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
     inputs = {"messages": [{"role": "user", "content": query}]}
     last_state = None
 
@@ -308,7 +305,7 @@ def stream_all_topics_for_date(
 
 if __name__ == "__main__":
     responses_by_topic = stream_all_topics_for_date(
-        start_date="2025-11-18",
+        start_date="2025-8-20",
         end_date="2025-11-20",
     )
 

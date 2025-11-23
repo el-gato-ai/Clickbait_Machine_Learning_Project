@@ -75,7 +75,6 @@ def parse_mostpopular_page(html: str, known_titles: set) -> list[dict]:
     return records
 
 
-
 def scrape_lifo_mostpopular():
     urls = [
         "https://www.lifo.gr/mostpopular/7days",
@@ -102,7 +101,7 @@ def scrape_lifo_mostpopular():
         return
 
     df = pd.DataFrame(all_records, columns=["section", "title", "clickbait"])
-    df.to_csv("lifo_mostpopular_7days_today.csv", index=False, encoding="utf-8")
+    df.to_csv("../data/custom/lifo_mostpopular_7days_today.csv", index=False, encoding="utf-8")
     print("[INFO] Saved lifo_mostpopular_7days_today.csv with unique titles.")
 
 
