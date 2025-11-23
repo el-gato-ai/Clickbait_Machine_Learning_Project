@@ -1,4 +1,4 @@
-import os
+﻿import os
 from typing import List, Literal, Dict
 from datetime import datetime
 import uuid
@@ -125,7 +125,7 @@ INSTRUCTIONS:
 """
 
 
-EXCEL_PATH = "../data/custom/greek_news.xlsx"
+EXCEL_PATH = "../data/raw/custom/greek_news.xlsx"
 
 
 def append_news_to_excel(response: NewsResponse, query: str, excel_path = EXCEL_PATH) -> int:

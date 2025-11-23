@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
@@ -101,7 +101,7 @@ def scrape_lifo_mostpopular():
         return
 
     df = pd.DataFrame(all_records, columns=["section", "title", "clickbait"])
-    df.to_csv("../data/custom/lifo_mostpopular_7days_today.csv", index=False, encoding="utf-8")
+    df.to_csv("../data/raw/custom/lifo_mostpopular_7days_today.csv", index=False, encoding="utf-8")
     print("[INFO] Saved lifo_mostpopular_7days_today.csv with unique titles.")
 
 

@@ -1,9 +1,9 @@
 ﻿# Data Collection Toolkit
 
-This directory packages the scripts that keep the `data/custom` folder fresh with newly scraped Greek clickbait material. Two separate pipelines ship with the repo:
+This directory packages the scripts that keep the `data/raw/custom` folder fresh with newly scraped Greek clickbait material. Two separate pipelines ship with the repo:
 
-1. `search_agent.py` - a LangChain/Tavily/ChatGPT agent that hunts for recent Greek articles, summarizes them, and logs them into `data/custom/greek_news.xlsx`.
-2. `scrape_lifo.py` - a focused BeautifulSoup scraper that captures the headlines from LIFO's "Most Popular" feeds and saves the result as CSVs under `data/custom/`.
+1. `search_agent.py` - a LangChain/Tavily/ChatGPT agent that hunts for recent Greek articles, summarizes them, and logs them into `data/raw/custom/greek_news.xlsx`.
+2. `scrape_lifo.py` - a focused BeautifulSoup scraper that captures the headlines from LIFO's "Most Popular" feeds and saves the result as CSVs under `data/raw/custom/`.
 
 Use them together when you need a mix of curated positives (LIFO) and broader, labeled Greek articles.
 
@@ -32,7 +32,7 @@ What it does:
 - Builds topic-specific queries (Politics, Economy, Sports, Society, Technology, Culture, Fashion).
 - Uses TavilySearch to gather recent Greek articles per topic.
 - Invokes GPT-5 via LangChain to summarize each article (in English) and assign the correct topic label.
-- Appends the deduplicated rows (URL, title, description, topic, timestamps) to `../data/custom/greek_news.xlsx`.
+- Appends the deduplicated rows (URL, title, description, topic, timestamps) to `../data/raw/custom/greek_news.xlsx`.
 
 How to run:
 
@@ -49,7 +49,7 @@ What it does:
 
 - Fetches `https://www.lifo.gr/mostpopular`, `/7days`, and `/today` with polite headers.
 - Parses the sectioned lists, normalizes the titles, and removes duplicates.
-- Marks every captured headline as `clickbait=1` and persists the merged results to `../data/custom/lifo_mostpopular_7days_today.csv` (plus any suffixed backups you create).
+- Marks every captured headline as `clickbait=1` and persists the merged results to `../data/raw/custom/lifo_mostpopular_7days_today.csv` (plus any suffixed backups you create).
 
 How to run:
 
@@ -58,10 +58,10 @@ cd data_collection
 python scrape_lifo.py
 ```
 
-After a successful run you will find a CSV in `data/custom/` containing `section`, `title`, and `clickbait` columns - ideal as a high-precision positive set.
+After a successful run you will find a CSV in `data/raw/custom/` containing `section`, `title`, and `clickbait` columns - ideal as a high-precision positive set.
 
 ## Tips for Fresh Runs
 
 - Keep an eye on rate limits for both OpenAI and Tavily when looping over long date ranges.
 - If you rotate API keys or environments, rerun `pip install -r requirements.txt` and double-check that `.env` is discoverable (the scripts call `dotenv.load_dotenv()` at import time).
-- Commit the refreshed artifacts in `data/custom/` only if you want them tracked; otherwise, add paths to `.gitignore` before experimenting.
+- Commit the refreshed artifacts in `data/raw/custom/` only if you want them tracked; otherwise, add paths to `.gitignore` before experimenting.
