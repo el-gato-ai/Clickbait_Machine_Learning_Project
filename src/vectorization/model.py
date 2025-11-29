@@ -8,21 +8,25 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
-class Gemma_2B_Embeddings(BaseEstimator, TransformerMixin):
-    def __init__(self):
+class HFEmbeddings(BaseEstimator, TransformerMixin):
+    def __init__(
+        self,
+        model_name: str = "google/gemma-3-4b-it",
+        device_map: str = "auto",
+        torch_dtype = torch.bfloat16,
+    ):
         self.hf_login()
-        
-        # Set the model name for Gemma 1.1 2B model
-        self.model_name = "google/gemma-1.1-2b-it"
+        self.model_name = model_name
 
         # Load the tokenizer corresponding to the model
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        
+
         # Load the pre-trained model
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            device_map='auto',
-            torch_dtype=torch.bfloat16, 
+            device_map=device_map,
+            torch_dtype=torch_dtype,
+            trust_remote_code=True,
         )
 
         # Set the model to evaluation mode
@@ -84,3 +88,8 @@ class Gemma_2B_Embeddings(BaseEstimator, TransformerMixin):
         
         print('Embeddings have been created successfully!!')
         return pd.DataFrame(embeddings)
+
+    def fit_transform(self, X, y=None, batch_size=100):
+        """Fit the model and transform the input data to generate embeddings."""
+        self.fit(X, y)
+        return self.transform(X, batch_size=batch_size)

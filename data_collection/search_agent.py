@@ -305,8 +305,8 @@ def stream_all_topics_for_date(
 
 if __name__ == "__main__":
     responses_by_topic = stream_all_topics_for_date(
-        start_date="2025-8-20",
-        end_date="2025-11-20",
+        start_date=datetime.now(),
+        end_date=datetime.now(),
     )
 
     print("\n=== Final structured results per topic ===")
