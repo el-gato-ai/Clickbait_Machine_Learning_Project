@@ -92,7 +92,8 @@ def embed_all_raw(
     """
     Walk `raw_root` for CSV/XLSX/JSONL files, embed the chosen column, and save to `embedded_root`.
 
-    Output files are flattened (path parts joined with '__') and suffixed with `_embed.<format>`.
+    Output files are flattened (path parts joined with '__') and suffixed with `_embed.<format>`,
+    under a model-specific subdirectory.
     When skip_existing=True, files with an existing embedding output are skipped.
     """
     fmt = output_format.lower()
@@ -103,10 +104,11 @@ def embed_all_raw(
     embedded_root = Path(embedded_root)
     embedded_root.mkdir(parents=True, exist_ok=True)
     embedder = embedder or HFEmbeddings(model_name=model_name or "google/gemma-3-4b-it")
+    effective_model_name = embedder.model_name
 
     outputs: list[Path] = []
     for raw_file in _iter_raw_files(raw_root):
-        out_path = _build_output_path(raw_root, embedded_root, raw_file, fmt)
+        out_path = _build_output_path(raw_root, embedded_root, raw_file, fmt, effective_model_name)
         if skip_existing and out_path.exists():
             print(f"[SKIP] Embeddings already exist for {raw_file} -> {out_path}")
             outputs.append(out_path)

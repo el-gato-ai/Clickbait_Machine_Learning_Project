@@ -22,15 +22,21 @@ def _iter_raw_files(raw_root: Union[str, Path]) -> Iterable[Path]:
 
 
 def _build_output_path(
-    raw_root: Path, embedded_root: Path, raw_file: Path, output_format: str
+    raw_root: Path,
+    embedded_root: Path,
+    raw_file: Path,
+    output_format: str,
+    model_name: str,
 ) -> Path:
     """
     Construct output path by flattening relative path from raw_root to raw_file,
-    joining parts with '__', and suffixing with `_embed.<format>`.
+    joining parts with '__', and suffixing with `_embed.<format>`, nested under
+    a model-name directory.
     """
     rel = raw_file.relative_to(raw_root).with_suffix("")
     flat_name = "__".join(rel.parts) + f"_embed.{output_format}"
-    return embedded_root / flat_name
+    model_dir = model_name.replace("/", "__")
+    return embedded_root / model_dir / flat_name
 
 
 def _select_column(df: pd.DataFrame, column: Union[str, int, Iterable[str]]) -> str:
@@ -93,4 +99,3 @@ def load_dataframe(
 
     titles = df[[col_name]].dropna()
     return titles
-
