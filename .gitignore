@@ -1,3 +1,16 @@
 .env
 **/__pycache__/**
+__pycache__/# PyCharm settings (ρυθμίσεις του editor)
+.idea/
+
+# Python compiled files (προσωρινά αρχεία μεταγλώττισης)
 __pycache__/
+*.pyc
+
+# Virtual Environment (ο φάκελος με τις βιβλιοθήκες - ΠΟΛΥ ΣΗΜΑΝΤΙΚΟ)
+venv/
+.venv/
+env/
+
+# Mac OS files (αν είσαι σε Mac, αλλιώς δεν πειράζει να υπάρχει)
+.DS_Store
