@@ -39,9 +39,10 @@ How to run:
 ```bash
 cd data_collection
 python search_agent.py
+python search_agent.py --mode clickbait   # to focus on clickbait headlines
 ```
 
-The default main function requests articles between the dates set near the bottom of the script. Adjust `start_date`, `end_date`, or `TOPICS` before running if you want a different window or subset. Each execution prints the streaming agent output and reports how many rows were appended to the Excel file.
+By default the main function requests articles from roughly the last 30 days (rolling window based on the current UTC date). If you want a different window or subset, adjust the `start_date`, `end_date`, or `TOPICS` values near the bottom of `search_agent.py` before running. Each execution prints the streaming agent output and reports how many rows were appended to the Excel file.
 
 ## 2. LIFO Most-Popular Scraper (`scrape_lifo.py`)
 

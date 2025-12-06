@@ -1,7 +1,7 @@
 ﻿import os
+import argparse
 from typing import List, Literal, Dict
-from datetime import datetime
-import uuid
+from datetime import datetime, timedelta
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -40,6 +40,8 @@ TOPICS: List[TopicLiteral] = [
     "Fashion",
 ]
 
+SearchModeLiteral = Literal["news", "clickbait"]
+
 
 class NewsItem(BaseModel):
     """Single news item from a Greek news site."""
@@ -63,8 +65,9 @@ class NewsResponse(BaseModel):
 
 search_tool = TavilySearch(
     api_key=os.getenv("TAVILY_API_KEY"),
-    max_results=8,
+    max_results=5,
     topic="news",
+    time_range=None,
     include_answer=False,
     include_raw_content=False,
     include_domains=[
@@ -117,11 +120,14 @@ TIME FILTERING:
             - pass these as `start_date` and `end_date` parameters
             in the TavilySearch tool call (format: YYYY-MM-DD),
             - and also respect them in your reasoning.
+    - NEVER use the `time_range` parameter in TavilySearch tool calls.
+      If you pass `start_date` or `end_date`, `time_range` MUST be omitted.
 
 INSTRUCTIONS:
     - Use `results[].title`, `results[].content`, and `results[].url` from TavilySearch results.
     - Skip generic homepages; prefer individual articles.
     - If the query is broad (e.g. "latest news"), return 5-8 diverse, representative articles.
+    - Dont do a thousand search iterations; be concise and efficient. Max 4-5 tool calls.
 """
 
 
@@ -200,25 +206,48 @@ def save_news_after_model(state: AgentState, runtime: Runtime) -> dict | None:
     return None
 
 
-agent = create_agent(
-    model=ChatOpenAI(model="gpt-5", temperature=0),
-    tools=[search_tool],
-    system_prompt=SYSTEM_PROMPT,
-    response_format=NewsResponse,
-    middleware=[save_news_after_model],
-)
+def build_news_agent():
+    """
+    Build a fresh agent instance.
+    Called per-topic so that state does not leak across topics.
+    """
+    return create_agent(
+        model=ChatOpenAI(
+            model="gpt-5-nano-2025-08-07",
+            temperature=0,
+            reasoning_effort="low",
+        ),
+        tools=[search_tool],
+        system_prompt=SYSTEM_PROMPT,
+        response_format=NewsResponse,
+        middleware=[save_news_after_model],
+    )
 
 
 def build_topic_query(
     topic: TopicLiteral,
     start_date: str | None = None,
     end_date: str | None = None,
+    mode: SearchModeLiteral = "news",
 ) -> str:
     """
-    Build a natural language query for a given topic and a date range.
+    Build a natural language query for a given topic, date range,
+    and desired article style (news vs clickbait).
     Dates should be in YYYY-MM-DD if provided.
     """
-    base = f"Find important Greek news articles about '{topic}' from Greek news websites."
+    if mode == "clickbait":
+        base = (
+            f"Find Greek news articles with CLICKBAIT, sensational, exaggerated, "
+            f"or emotionally charged headlines about '{topic}' from Greek news websites. "
+            "Prefer provocative, dramatic, or curiosity-inducing headlines even if the story "
+            "itself is not especially important."
+        )
+    else:
+        base = (
+            f"Find important and significant Greek news articles about '{topic}' "
+            "from reputable Greek news websites. Avoid clickbait; prefer balanced, "
+            "informative reporting on meaningful events."
+        )
 
     if start_date and end_date:
         base += (
@@ -245,13 +274,13 @@ def stream_greek_news_agent(query: str) -> NewsResponse:
     Stream agent progress to CLI for a single query.
     Excel append is handled automatically by @after_model middleware.
     """
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    agent = build_news_agent()
     inputs = {"messages": [{"role": "user", "content": query}]}
     last_state = None
 
     print(f"\n=== Running agent for query: {query!r} ===\n")
 
-    for state in agent.stream(inputs, config=config, stream_mode="values"):
+    for state in agent.stream(inputs, stream_mode="values"):
         last_state = state
         messages = state.get("messages", [])
         if not messages:
@@ -279,6 +308,7 @@ def stream_all_topics_for_date(
     start_date: str | None = None,
     end_date: str | None = None,
     topics: List[TopicLiteral] | None = None,
+    mode: SearchModeLiteral = "news",
 ) -> Dict[TopicLiteral, NewsResponse]:
     """
     For each topic, build a dynamic query including the date range,
@@ -296,7 +326,12 @@ def stream_all_topics_for_date(
         print(f"### TOPIC: {topic} ###")
         print("=" * 80)
 
-        query = build_topic_query(topic, start_date=start_date, end_date=end_date)
+        query = build_topic_query(
+            topic,
+            start_date=start_date,
+            end_date=end_date,
+            mode=mode,
+        )
         response = stream_greek_news_agent(query)
         results[topic] = response
 
@@ -304,16 +339,53 @@ def stream_all_topics_for_date(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description=(
+            "Collect Greek news articles per topic using Tavily + GPT. "
+            "You can choose between 'news' (significant articles) "
+            "and 'clickbait' (sensational headlines)."
+        )
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["news", "clickbait"],
+        default="news",
+        help=(
+            "What kind of articles to collect: "
+            "'news' for significant, balanced reporting (default), "
+            "'clickbait' for sensational or exaggerated headlines."
+        ),
+    )
+    args = parser.parse_args()
+
+    today_utc = datetime.utcnow().date()
+    start_date = (today_utc - timedelta(days=30)).strftime("%Y-%m-%d")
+    end_date = today_utc.strftime("%Y-%m-%d")
+
     responses_by_topic = stream_all_topics_for_date(
-        start_date=datetime.now(),
-        end_date=datetime.now(),
+        start_date=start_date,
+        end_date=end_date,
+        mode=args.mode,
     )
 
-    print("\n=== Final structured results per topic ===")
+    print("\n=== Summary of collected articles ===")
+    overall_url_title_pairs = set()
+
     for topic, resp in responses_by_topic.items():
+        total_items = len(resp.items)
+        unique_urls = {item.url for item in resp.items}
+        unique_pairs = {(item.url, item.title) for item in resp.items}
+        overall_url_title_pairs.update(unique_pairs)
+
         print(f"\n##### {topic} #####")
-        for item in resp.items:
-            print(f"[{item.topic}] {item.title}")
-            print(item.url)
-            print(item.description)
-            print("-" * 80)
+        print(f"Total articles returned: {total_items}")
+        print(f"Distinct URLs in this topic: {len(unique_urls)}")
+        print(
+            f"Distinct (URL, title) pairs in this topic: "
+            f"{len(unique_pairs)}"
+        )
+
+    print(
+        "\n=== Overall distinct (URL, title) pairs across all topics "
+        f"this run: {len(overall_url_title_pairs)} ==="
+    )
