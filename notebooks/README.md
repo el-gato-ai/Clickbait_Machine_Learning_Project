@@ -4,7 +4,7 @@ This folder holds the end-to-end clickbait detection workflow, from raw data che
 
 ## Contents
 
-- `01_data_overview.ipynb`: sanity checks on raw sources and label balance.
+- `01_eda.ipynb`: sanity checks on raw sources and label balance.
 - `02_clean_merge.ipynb`: cleaning, normalization, and merging across datasets.
 - `03_feature_engineering.ipynb`: text preprocessing and classic feature builds.
 - `04_modeling_baselines.ipynb`: traditional ML baselines with validation.
