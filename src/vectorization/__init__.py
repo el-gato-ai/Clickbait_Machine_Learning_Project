@@ -1,10 +1,14 @@
 """Vectorization module for creating and saving text embeddings."""
+from pathlib import Path
+import sys
+
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 # Embedding generic classes
-from model import HFEmbeddings
+from src.vectorization.model import HFEmbeddings
 
 # Utility functions
-from utils import (
+from src.vectorization.utils import (
     load_dataframe,
     _iter_raw_files,
     _build_output_path,
@@ -14,10 +18,10 @@ from utils import (
 )
 
 # Core vectorization functions
-from vectorize import (
+from src.vectorization.vectorize import (
     create_embeddings,
     save_embeddings,
     embed_titles,
-    embed_all_raw,
+    embed_all,
 )
 

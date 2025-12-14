@@ -4,7 +4,7 @@ Make sure to have the required environment variables set, e.g., in a .env file i
 
 """
 
-from vectorize import embed_all_raw
+from src.vectorization.vectorize import embed_all
 
 if __name__ == "__main__":
     # Load environment variables from a .env file if present
@@ -12,4 +12,4 @@ if __name__ == "__main__":
     _ = load_dotenv(find_dotenv())
     
     # Run the embedding process on all raw data files
-    embed_all_raw()
+    embed_all()

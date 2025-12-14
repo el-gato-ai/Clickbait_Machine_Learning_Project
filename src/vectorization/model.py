@@ -45,7 +45,11 @@ class HFEmbeddings(BaseEstimator, TransformerMixin):
         """Log in to Hugging Face using a token from environment variables."""
         hf_token = os.getenv("HUGGINGFACE_TOKEN")
         if not hf_token:
-            raise ValueError("Hugging Face token not found in environment variables. Set the 'HUGGINGFACE_TOKEN' variable.")
+            from dotenv import load_dotenv, find_dotenv
+            _ = load_dotenv(find_dotenv())
+            hf_token = os.getenv("HUGGINGFACE_TOKEN")
+            if not hf_token:
+                raise ValueError("Hugging Face token not found in environment variables. Set the 'HUGGINGFACE_TOKEN' variable.")
         else:
             print('HF Token successfully found!!')
                 

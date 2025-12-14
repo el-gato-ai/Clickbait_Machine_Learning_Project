@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Iterable, Union
 import pandas as pd
 
-from model import HFEmbeddings
-from utils import (
+from src.vectorization.model import HFEmbeddings
+from src.vectorization.utils import (
     load_dataframe,
     _iter_raw_files,
     _build_output_path,
@@ -79,7 +79,7 @@ def embed_titles(
     return save_embeddings(embeddings, output_path, output_format=output_format)
 
 
-def embed_all_raw(
+def embed_all(
     raw_root: Union[str, Path] = Path(__file__).resolve().parents[2] / "data" / "raw",
     embedded_root: Union[str, Path] = Path(__file__).resolve().parents[2] / "data" / "embedded",
     column: Union[str, int, Iterable[str]] = ("title", "headline", "targetTitle"),
