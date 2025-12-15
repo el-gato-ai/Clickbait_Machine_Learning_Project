@@ -14,3 +14,13 @@ env/
 
 # Mac OS files (αν είσαι σε Mac, αλλιώς δεν πειράζει να υπάρχει)
 .DS_Store
+
+# VSCode settings (ρυθμίσεις του editor)
+.vscode/
+*.code-workspace
+.virtual_documents/
+
+#IDEs settings
+*.sublime-project
+*.sublime-workspace
+.idea/
