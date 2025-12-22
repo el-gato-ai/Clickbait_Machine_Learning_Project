@@ -6,3 +6,4 @@ pydantic
 pandas
 beautifulsoup4
 python-dotenv
+optuna

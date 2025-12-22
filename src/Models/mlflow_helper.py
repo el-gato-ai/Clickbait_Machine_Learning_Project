@@ -5,7 +5,54 @@ import time
 from sklearn.metrics import (accuracy_score, f1_score, precision_score, recall_score,
                              roc_auc_score, confusion_matrix, roc_curve)
 
+import os  # <--- Σιγουρέψου ότι υπάρχει αυτό στην αρχή του αρχείου
 
+def setup_mlflow(experiment_name):
+    """
+    Ορίζει το όνομα του πειράματος και αναγκάζει την αποθήκευση 
+    στον κεντρικό φάκελο mlruns του project (Project Root).
+    """
+    # Βρίσκουμε το μονοπάτι του αρχείου mlflow_helper.py
+    current_file_path = os.path.abspath(__file__)
+    
+    # Πηγαίνουμε 3 φακέλους πίσω για να βρούμε το root του project
+    # (από src/Models/mlflow_helper.py -> src/Models -> src -> Project Root)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
+    
+    # Ορίζουμε τον φάκελο mlruns στο root
+    mlruns_path = os.path.join(project_root, "mlruns")
+    
+    # Ρυθμίζουμε το MLflow να κοιτάει ΠΑΝΤΑ εκεί
+    mlflow.set_tracking_uri(f"file://{mlruns_path}")
+    
+    mlflow.set_experiment(experiment_name)
+    print(f"🚀 MLflow tracking URI set to: {mlruns_path}")
+    print(f"🚀 MLflow experiment set to: {experiment_name}")
+
+def log_optuna_trial(trial, params, metrics, model, model_name_artifact):
+    """
+    Καταγράφει τα αποτελέσματα ενός trial του Optuna στο MLflow.
+    Δημιουργεί ένα nested run για κάθε δοκιμή.
+    """
+    with mlflow.start_run(nested=True):
+        # 1. Καταγραφή των παραμέτρων που διάλεξε το Optuna
+        mlflow.log_params(params)
+        mlflow.log_param("trial_number", trial.number)
+
+        # 2. Καταγραφή των Metrics (F1, Accuracy κλπ)
+        # Αν το metrics είναι λεξικό (dictionary), τα καταγράφουμε όλα
+        if isinstance(metrics, dict):
+            mlflow.log_metrics(metrics)
+        else:
+            # Αν μας ήρθε σκέτο νούμερο (π.χ. f1 score), το καταγράφουμε ως score
+            mlflow.log_metric("score", metrics)
+
+        # 3. Καταγραφή του Μοντέλου
+        try:
+            mlflow.sklearn.log_model(model, model_name_artifact)
+        except Exception as e:
+            print(f"⚠️ Δεν ήταν δυνατή η αποθήκευση του μοντέλου: {e}")
+            
 def evaluate_and_log_metrics(model, X_test, y_test, prefix="test"):
     """
     Υπολογίζει metrics, φτιάχνει γραφήματα και τα στέλνει στο MLflow.
