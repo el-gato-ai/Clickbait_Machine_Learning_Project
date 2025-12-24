@@ -8,15 +8,8 @@ from sklearn.metrics import (accuracy_score, f1_score, precision_score, recall_s
                              roc_auc_score, confusion_matrix, roc_curve,
                              average_precision_score, precision_recall_curve, log_loss, classification_report)
 
-
 def setup_mlflow(experiment_name):
-    """
-    Ρυθμίζει το MLflow να αποθηκεύει στον φάκελο 'mlruns' στο root του project.
-    """
     current_file_path = os.path.abspath(__file__)
-    # Υποθέτουμε δομή: src/Models/mlflow_helper.py -> root είναι 2 επίπεδα πάνω
-    # Αν το script είναι στο Models/Random Forest..., θέλουμε 3 επίπεδα πίσω.
-    # Για ασφάλεια, ψάχνουμε το φάκελο 'data' ή 'mlruns' προς τα πίσω.
 
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
     mlruns_path = os.path.join(project_root, "mlruns")
@@ -26,12 +19,14 @@ def setup_mlflow(experiment_name):
     print(f"🚀 MLflow tracking URI set to: {mlruns_path}")
     print(f"🚀 MLflow experiment set to: {experiment_name}")
 
+def log_optuna_trial(trial, params, metrics, model, run_name_prefix):
+    """
+    Καταγράφει τα αποτελέσματα ενός trial.
+    """
+    # Δημιουργούμε όνομα τύπου: "SGD_Trial_05"
+    trial_name = f"{run_name_prefix}_{trial.number}"
 
-def log_optuna_trial(trial, params, metrics, model, model_name_artifact):
-    """
-    Καταγράφει ένα trial του Optuna.
-    """
-    with mlflow.start_run(nested=True):
+    with mlflow.start_run(run_name=trial_name, nested=True):
         mlflow.log_params(params)
         mlflow.log_param("trial_number", trial.number)
 
@@ -40,16 +35,9 @@ def log_optuna_trial(trial, params, metrics, model, model_name_artifact):
         else:
             mlflow.log_metric("score", metrics)
 
-        try:
-            mlflow.sklearn.log_model(model, model_name_artifact)
-        except Exception as e:
-            print(f"⚠️ Δεν ήταν δυνατή η αποθήκευση του μοντέλου: {e}")
-
-
 def evaluate_and_log_metrics(model, X_test, y_test, prefix="test", training_time=None):
     """
     Υπολογίζει metrics, φτιάχνει γραφήματα και τα στέλνει στο MLflow.
-    Δέχεται προαιρετικά το training_time για να το καταγράψει.
     """
     start_time = time.time()
 

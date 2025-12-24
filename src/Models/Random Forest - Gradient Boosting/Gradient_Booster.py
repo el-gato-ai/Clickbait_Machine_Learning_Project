@@ -4,57 +4,98 @@ import optuna
 import mlflow
 import sys
 import os
-import time  # <--- Χρειαζόμαστε το time
+import time
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, f1_score
 
-# --- ΡΥΘΜΙΣΕΙΣ PATHS ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import mlflow_helper
 
+# Δυναμικός εντοπισμός των αρχείων δεδομένων
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_script_path, '../../..'))
 DATA_FOLDER = os.path.join(project_root, 'data', 'clean', 'umap')
 
 
 def load_split_data(data_path):
-    # (Ο κώδικας φόρτωσης παραμένει ίδιος όπως τον φτιάξαμε πριν - Copy Paste από το προηγούμενο)
-    files = {"Train": "train_umap_500.parquet", "Valid": "valid_umap_500.parquet", "Test": "test_umap_500.parquet"}
+    files = {
+        "Train": "train_umap_500.parquet",
+        "Valid": "valid_umap_500.parquet",
+        "Test": "test_umap_500.parquet"
+    }
+
     loaded_data = {}
     possible_label_cols = ['labels', 'label', 'target', 'class', 'is_clickbait']
 
     print(f"⏳ Έναρξη φόρτωσης δεδομένων από: {data_path}")
+
     for name, filename in files.items():
         file_path = os.path.join(data_path, filename)
-        if not os.path.exists(file_path): sys.exit(f"❌ Missing {filename}")
 
+        if not os.path.exists(file_path):
+            print(f"❌ Το αρχείο {filename} δεν βρέθηκε.")
+            sys.exit(1)
+
+        # 1. Φόρτωση DataFrame
         try:
             df = pd.read_parquet(file_path, engine='fastparquet')
-        except:
-            df = pd.read_parquet(file_path, engine='pyarrow')
+        except Exception:
+            try:
+                df = pd.read_parquet(file_path, engine='pyarrow')
+            except Exception as e:
+                print(f"⛔ Σφάλμα κατά την ανάγνωση του {filename}: {e}")
+                sys.exit(1)
 
+        # 2. Εντοπισμός Features (X)
         feature_cols = [c for c in df.columns if c.startswith("umap_")]
-        if not feature_cols: feature_cols = [c for c in df.columns if c not in possible_label_cols]
+        if not feature_cols:
+            feature_cols = [c for c in df.columns if c not in possible_label_cols]
 
-        label_col = next((c for c in possible_label_cols if c in df.columns), None)
-        if not label_col:
-            rem = [c for c in df.columns if c not in feature_cols]
-            if len(rem) == 1:
-                label_col = rem[0]
+        # 3. Εντοπισμός Labels (y)
+        label_col = None
+        for col in possible_label_cols:
+            if col in df.columns:
+                label_col = col
+                break
+
+        if label_col is None:
+            remaining = [c for c in df.columns if c not in feature_cols]
+            if len(remaining) == 1:
+                label_col = remaining[0]
+                print(f"   ⚠️ {name}: Αυτόματος εντοπισμός label στήλης: '{label_col}'")
+
+        if label_col:
+            if label_col in feature_cols:
+                feature_cols.remove(label_col)
+            y = df[label_col].values.astype(int)
+        else:
+            # Fallback: Έλεγχος για εξωτερικό αρχείο
+            prefix = filename.split('_')[0]
+            ext_label_path = os.path.join(data_path, f"{prefix}_labels.csv")
+            if os.path.exists(ext_label_path):
+                print(f"   ℹ️ {name}: Ανάγνωση labels από εξωτερικό αρχείο ({prefix}_labels.csv)")
+                y = pd.read_csv(ext_label_path).iloc[:, 0].values.astype(int)
             else:
-                sys.exit(f"❌ No label found in {filename}")
+                print(f"⛔ Σφάλμα στο {name}: Δεν βρέθηκε στήλη label.")
+                sys.exit(1)
 
-        if label_col in feature_cols: feature_cols.remove(label_col)
-
+        # 4. Μετατροπή σε Numpy Arrays
         X = df[feature_cols].values.astype(np.float32)
-        y = df[label_col].values.astype(int)
+
+        if len(X) != len(y):
+            print(f"❌ Ασυμφωνία διαστάσεων στο {name}: X={len(X)}, y={len(y)}")
+            sys.exit(1)
+
         loaded_data[name] = (X, y)
-        print(f"   ✅ {name} loaded: {X.shape}")
+        print(f"   ✅ {name} loaded: X={X.shape}, y={y.shape}")
 
     return loaded_data["Train"], loaded_data["Valid"], loaded_data["Test"]
 
-
 def objective(trial, X_tr, y_tr, X_v, y_v):
+    """
+    Objective function για το Optuna (Gradient Boosting).
+    """
+    # --- Search Space ---
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 100, 300),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
@@ -70,61 +111,92 @@ def objective(trial, X_tr, y_tr, X_v, y_v):
     start_time = time.time()
     model.fit(X_tr, y_tr)
     training_time = time.time() - start_time
-    # -----------------------------------------------
+    # -------------------------------------------
 
+    # Validation
     preds = model.predict(X_v)
     f1 = f1_score(y_v, preds)
     acc = accuracy_score(y_v, preds)
 
-    # Περνάμε και το training_time στα metrics που καταγράφονται
     metrics = {"val_f1": f1, "val_accuracy": acc, "training_time_sec": training_time}
-    mlflow_helper.log_optuna_trial(trial, params, metrics, model, "gb_trial")
+
+    # Log στο MLflow με όνομα GB_Trial
+    mlflow_helper.log_optuna_trial(
+        trial,
+        params,
+        metrics,
+        model,
+        run_name_prefix="GB_Trial"
+    )
 
     return f1
 
-
 def run_experiment():
-    EXPERIMENT_NAME = "Clickbait_GradientBoosting_UMAP_Final_V2"
+    EXPERIMENT_NAME = "Clickbait_GradientBoosting_UMAP_Final"
+
+    # 1. Setup MLflow
     mlflow_helper.setup_mlflow(EXPERIMENT_NAME)
     print(f"\n🚀 Έναρξη Πειράματος: {EXPERIMENT_NAME}")
 
+    # 2. Φόρτωση Δεδομένων
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = load_split_data(DATA_FOLDER)
 
-    with mlflow.start_run(run_name="GB_Optimization_Full_Metrics") as run:
-        mlflow.log_param("dataset", "UMAP_500")
+    # Σημείωση: Στο Gradient Boosting δεν είναι αυστηρά απαραίτητο το StandardScaler,
+    # οπότε δεν το εφαρμόζουμε εδώ για να κρατήσουμε τη διαδικασία "καθαρή" για δέντρα.
 
-        # Optuna
-        print("\n🔎 Tuning Hyperparameters...")
-        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=42))
+    # --- ΦΑΣΗ 1: Hyperparameter Tuning ---
+    print("\n🔍 ΦΑΣΗ 1: Αναζήτηση Βέλτιστων Παραμέτρων (Optuna)...")
+
+    with mlflow.start_run(run_name="🔍_GB_Hyperparameter_Tuning") as tuning_run:
+        mlflow.log_param("dataset", "UMAP_500")
+        mlflow.log_param("model_type", "GradientBoosting")
+
+        sampler = optuna.samplers.TPESampler(seed=42)
+        study = optuna.create_study(direction="maximize", sampler=sampler)
+
+        # Εκτέλεση 15 trials (το GB είναι πιο αργό από το SGD)
         study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=15)
 
-        print(f"🏆 Best Params: {study.best_params}")
+        print(f"🏆 Best Params found: {study.best_params}")
+        print(f"🏆 Best Val F1: {study.best_value:.4f}")
 
-        # Champion Model Training
-        print("\n⚙️ Training Champion Model...")
+    # --- ΦΑΣΗ 2: Champion Model Training (ΞΕΧΩΡΙΣΤΟ RUN) ---
+    print("\n👑 ΦΑΣΗ 2: Εκπαίδευση & Αποθήκευση Champion Model...")
+
+    with mlflow.start_run(run_name="👑_GB_Champion_Model") as final_run:
         best_params = study.best_params
         best_params["random_state"] = 42
+
+        mlflow.log_params(best_params)
+        mlflow.log_param("model_type", "GB_Champion")
+
         final_model = GradientBoostingClassifier(**best_params)
 
-        X_full = np.concatenate((X_train, X_val))
-        y_full = np.concatenate((y_train, y_val))
+        # Ένωση Train + Val
+        X_full_train = np.concatenate((X_train, X_val))
+        y_full_train = np.concatenate((y_train, y_val))
 
-        # --- NEW: Μέτρηση Χρόνου (Champion Model) ---
+        # Μέτρηση χρόνου τελικής εκπαίδευσης
         start_t = time.time()
-        final_model.fit(X_full, y_full)
+        final_model.fit(X_full_train, y_full_train)
         final_train_time = time.time() - start_t
         print(f"⏱️ Training Time: {final_train_time:.2f} sec")
-        # --------------------------------------------
 
+        # Log του μοντέλου
         mlflow.sklearn.log_model(final_model, artifact_path="champion_model")
 
-        # Evaluation
-        print("\n📈 Evaluating on Test Set...")
-        # Περνάμε το training_time στη συνάρτηση για να καταγραφεί μαζί με τα υπόλοιπα
-        mlflow_helper.evaluate_and_log_metrics(final_model, X_test, y_test, prefix="test",
-                                               training_time=final_train_time)
+        # Evaluation στο Test set
+        print("📈 Αξιολόγηση στο Test Set...")
+        mlflow_helper.evaluate_and_log_metrics(
+            final_model,
+            X_test,
+            y_test,
+            prefix="test",
+            training_time=final_train_time
+        )
 
-        print(f"\n✅ Ολοκληρώθηκε! Run ID: {run.info.run_id}")
+        print(f"\n✅ ΤΕΛΟΣ! Το Champion Model αποθηκεύτηκε στο Run ID: {final_run.info.run_id}")
+        print(f"   👉 Αναζητήστε στο MLflow UI το Run με όνομα: '👑_GB_Champion_Model'")
 
 
 if __name__ == "__main__":
