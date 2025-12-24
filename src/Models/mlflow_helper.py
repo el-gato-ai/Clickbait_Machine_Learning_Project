@@ -2,68 +2,61 @@ import mlflow
 import matplotlib.pyplot as plt
 import seaborn as sns
 import time
+import numpy as np
+import os
 from sklearn.metrics import (accuracy_score, f1_score, precision_score, recall_score,
-                             roc_auc_score, confusion_matrix, roc_curve)
+                             roc_auc_score, confusion_matrix, roc_curve,
+                             average_precision_score, precision_recall_curve, log_loss, classification_report)
 
-import os  # <--- Σιγουρέψου ότι υπάρχει αυτό στην αρχή του αρχείου
 
 def setup_mlflow(experiment_name):
     """
-    Ορίζει το όνομα του πειράματος και αναγκάζει την αποθήκευση 
-    στον κεντρικό φάκελο mlruns του project (Project Root).
+    Ρυθμίζει το MLflow να αποθηκεύει στον φάκελο 'mlruns' στο root του project.
     """
-    # Βρίσκουμε το μονοπάτι του αρχείου mlflow_helper.py
     current_file_path = os.path.abspath(__file__)
-    
-    # Πηγαίνουμε 3 φακέλους πίσω για να βρούμε το root του project
-    # (από src/Models/mlflow_helper.py -> src/Models -> src -> Project Root)
+    # Υποθέτουμε δομή: src/Models/mlflow_helper.py -> root είναι 2 επίπεδα πάνω
+    # Αν το script είναι στο Models/Random Forest..., θέλουμε 3 επίπεδα πίσω.
+    # Για ασφάλεια, ψάχνουμε το φάκελο 'data' ή 'mlruns' προς τα πίσω.
+
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
-    
-    # Ορίζουμε τον φάκελο mlruns στο root
     mlruns_path = os.path.join(project_root, "mlruns")
-    
-    # Ρυθμίζουμε το MLflow να κοιτάει ΠΑΝΤΑ εκεί
+
     mlflow.set_tracking_uri(f"file://{mlruns_path}")
-    
     mlflow.set_experiment(experiment_name)
     print(f"🚀 MLflow tracking URI set to: {mlruns_path}")
     print(f"🚀 MLflow experiment set to: {experiment_name}")
 
+
 def log_optuna_trial(trial, params, metrics, model, model_name_artifact):
     """
-    Καταγράφει τα αποτελέσματα ενός trial του Optuna στο MLflow.
-    Δημιουργεί ένα nested run για κάθε δοκιμή.
+    Καταγράφει ένα trial του Optuna.
     """
     with mlflow.start_run(nested=True):
-        # 1. Καταγραφή των παραμέτρων που διάλεξε το Optuna
         mlflow.log_params(params)
         mlflow.log_param("trial_number", trial.number)
 
-        # 2. Καταγραφή των Metrics (F1, Accuracy κλπ)
-        # Αν το metrics είναι λεξικό (dictionary), τα καταγράφουμε όλα
         if isinstance(metrics, dict):
             mlflow.log_metrics(metrics)
         else:
-            # Αν μας ήρθε σκέτο νούμερο (π.χ. f1 score), το καταγράφουμε ως score
             mlflow.log_metric("score", metrics)
 
-        # 3. Καταγραφή του Μοντέλου
         try:
             mlflow.sklearn.log_model(model, model_name_artifact)
         except Exception as e:
             print(f"⚠️ Δεν ήταν δυνατή η αποθήκευση του μοντέλου: {e}")
-            
-def evaluate_and_log_metrics(model, X_test, y_test, prefix="test"):
+
+
+def evaluate_and_log_metrics(model, X_test, y_test, prefix="test", training_time=None):
     """
     Υπολογίζει metrics, φτιάχνει γραφήματα και τα στέλνει στο MLflow.
-    prefix: 'val' για validation set, 'test' για test set.
+    Δέχεται προαιρετικά το training_time για να το καταγράψει.
     """
     start_time = time.time()
 
     # 1. Προβλέψεις
     predictions = model.predict(X_test)
 
-    # Προσπάθεια λήψης πιθανοτήτων για ROC-AUC (κάποια μοντέλα όπως SVM-linear δεν έχουν predict_proba)
+    # Προσπάθεια λήψης πιθανοτήτων
     try:
         probs = model.predict_proba(X_test)[:, 1]
         has_probs = True
@@ -73,52 +66,93 @@ def evaluate_and_log_metrics(model, X_test, y_test, prefix="test"):
 
     inference_time = time.time() - start_time
 
-    # 2. Υπολογισμός Metrics
+    # 2. Βασικά Metrics
     acc = accuracy_score(y_test, predictions)
     f1 = f1_score(y_test, predictions)
     precision = precision_score(y_test, predictions)
     recall = recall_score(y_test, predictions)
 
-    # Καταγραφή νούμερων
-    mlflow.log_metric(f"{prefix}_accuracy", acc)
-    mlflow.log_metric(f"{prefix}_f1", f1)
-    mlflow.log_metric(f"{prefix}_precision", precision)
-    mlflow.log_metric(f"{prefix}_recall", recall)
-    mlflow.log_metric(f"{prefix}_inference_time_sec", inference_time)
+    metrics_to_log = {
+        f"{prefix}_accuracy": acc,
+        f"{prefix}_f1": f1,
+        f"{prefix}_precision": precision,
+        f"{prefix}_recall": recall,
+        f"{prefix}_inference_time_sec": inference_time
+    }
 
+    if training_time is not None:
+        metrics_to_log[f"{prefix}_training_time_sec"] = training_time
+
+    # 3. Advanced Metrics (Log Loss & PR Curve)
     if has_probs:
         auc = roc_auc_score(y_test, probs)
-        mlflow.log_metric(f"{prefix}_roc_auc", auc)
+        ll = log_loss(y_test, probs)
+        avg_prec = average_precision_score(y_test, probs)
 
-    # 3. Δημιουργία Confusion Matrix Plot
+        metrics_to_log[f"{prefix}_roc_auc"] = auc
+        metrics_to_log[f"{prefix}_log_loss"] = ll
+        metrics_to_log[f"{prefix}_average_precision"] = avg_prec
+
+    mlflow.log_metrics(metrics_to_log)
+
+    # 4. Plots
+    # Confusion Matrix
     cm = confusion_matrix(y_test, predictions)
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
     plt.title(f'Confusion Matrix ({prefix})')
     plt.ylabel('Actual')
     plt.xlabel('Predicted')
-
-    # Αποθήκευση εικόνας και upload στο MLflow
-    cm_filename = f"confusion_matrix_{prefix}.png"
-    plt.savefig(cm_filename)
-    mlflow.log_artifact(cm_filename)
+    plt.savefig(f"confusion_matrix_{prefix}.png")
+    mlflow.log_artifact(f"confusion_matrix_{prefix}.png")
     plt.close()
 
-    # 4. Δημιουργία ROC Curve Plot (Αν έχουμε πιθανότητες)
     if has_probs:
+        # ROC Curve
         fpr, tpr, _ = roc_curve(y_test, probs)
         plt.figure(figsize=(6, 5))
         plt.plot(fpr, tpr, label=f'AUC = {auc:.2f}')
-        plt.plot([0, 1], [0, 1], 'k--')  # Διαγώνιος
+        plt.plot([0, 1], [0, 1], 'k--')
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
         plt.title(f'ROC Curve ({prefix})')
         plt.legend()
-
-        roc_filename = f"roc_curve_{prefix}.png"
-        plt.savefig(roc_filename)
-        mlflow.log_artifact(roc_filename)
+        plt.savefig(f"roc_curve_{prefix}.png")
+        mlflow.log_artifact(f"roc_curve_{prefix}.png")
         plt.close()
+
+        # Precision-Recall Curve
+        prec_curve, rec_curve, _ = precision_recall_curve(y_test, probs)
+        plt.figure(figsize=(6, 5))
+        plt.plot(rec_curve, prec_curve, label=f'AP = {avg_prec:.2f}')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve ({prefix})')
+        plt.legend()
+        plt.savefig(f"pr_curve_{prefix}.png")
+        mlflow.log_artifact(f"pr_curve_{prefix}.png")
+        plt.close()
+
+    # Feature Importance (για Tree-based models)
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+        # Παίρνουμε τα top 20
+        indices = np.argsort(importances)[::-1][:20]
+
+        plt.figure(figsize=(10, 6))
+        plt.title(f"Top 20 Feature Importances ({prefix})")
+        plt.bar(range(len(indices)), importances[indices], align="center")
+        plt.xticks(range(len(indices)), [f"umap_{i}" for i in indices], rotation=45)
+        plt.tight_layout()
+        plt.savefig(f"feature_importance_{prefix}.png")
+        mlflow.log_artifact(f"feature_importance_{prefix}.png")
+        plt.close()
+
+    # Classification Report (Text)
+    report = classification_report(y_test, predictions)
+    with open(f"classification_report_{prefix}.txt", "w") as f:
+        f.write(report)
+    mlflow.log_artifact(f"classification_report_{prefix}.txt")
 
     print(f"📊 Metrics logged for {prefix}: F1={f1:.4f}, Acc={acc:.4f}")
     return f1
