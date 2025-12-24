@@ -2,35 +2,69 @@ import pandas as pd
 import numpy as np
 import optuna
 import mlflow
-import pickle  # <--- Απαραίτητο για την αποθήκευση του Scaler
+import pickle
 from sklearn.ensemble import GradientBoostingClassifier
+# Αν θες πιο γρήγορο training, άλλαξε το παραπάνω σε:
+# from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+import sys
+import os
+
+# --- ΡΥΘΜΙΣΕΙΣ PATHS & MLFLOW HELPER ---
+# Βρίσκουμε τον φάκελο που είναι το script και πάμε πίσω για να βρούμε το helper
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import mlflow_helper
 
-# --- ΡΥΘΜΙΣΕΙΣ ---
-PARQUET_FILE = ""  # <-- Βάλε το σωστό path
-EMBEDDING_COL = ""  # <-- Όνομα στήλης embeddings
-TARGET_COL = ""  # <-- Όνομα στήλης στόχου (0/1)
+# Δυναμικός εντοπισμός των αρχείων δεδομένων
+current_script_path = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_script_path, '../../..'))
+DATA_FOLDER_NAME = "merged"
+data_path = os.path.join(project_root, 'data', DATA_FOLDER_NAME)
+
+PARQUET_FILE = os.path.join(data_path, "data_merged_embed.parquet")
+CSV_FILE = os.path.join(data_path, "data_merged.csv")
+TARGET_COL = "label"
 
 
 def load_and_prep_data():
-    print("⏳ Φόρτωση Parquet αρχείου...")
+    print("⏳ Φόρτωση και συγχώνευση δεδομένων...")
+
+    # 1. Φόρτωση Embeddings
     try:
-        df = pd.read_parquet(PARQUET_FILE)
+        df_emb = pd.read_parquet(PARQUET_FILE)
     except FileNotFoundError:
-        print(f"❌ Το αρχείο {PARQUET_FILE} δεν βρέθηκε. Ελεγξε το path.")
-        exit()
-    except Exception as e:
-        print(f"❌ Κάτι πήγε στραβά με τη φόρτωση: {e}")
+        print(f"❌ Το αρχείο {PARQUET_FILE} δεν βρέθηκε.")
         exit()
 
-    # Μετατροπή της στήλης embeddings (που είναι λίστα) σε 2D numpy array
-    X = np.stack(df[EMBEDDING_COL].values)
-    y = df[TARGET_COL].values
+    # 2. Φόρτωση Labels
+    try:
+        df_lbl = pd.read_csv(CSV_FILE)
+    except FileNotFoundError:
+        print(f"❌ Το αρχείο {CSV_FILE} δεν βρέθηκε.")
+        exit()
 
-    print(f"✅ Δεδομένα φορτώθηκαν. Shape: {X.shape}")
+    # 3. Έλεγχος Συμβατότητας
+    if len(df_emb) != len(df_lbl):
+        print(f"❌ Σφάλμα: Τα αρχεία δεν ταιριάζουν! Embeddings: {len(df_emb)}, Labels: {len(df_lbl)}")
+        exit()
+
+    # 4. Εξαγωγή του X (Embeddings)
+    print(f"ℹ️ Το αρχείο Parquet έχει {len(df_emb.columns)} στήλες.")
+
+    if len(df_emb.columns) > 1:
+        print("ℹ️ Ανίχνευση πολλαπλών στηλών. Χρήση όλου του DataFrame ως features.")
+        X = df_emb.values  
+    else:
+        col_name = df_emb.columns[0]
+        print(f"ℹ️ Ανίχνευση μίας στήλης ('{col_name}'). Μετατροπή λιστών σε numpy array.")
+        X = np.stack(df_emb[col_name].values)
+
+    # 5. Εξαγωγή του y (Labels)
+    y = df_lbl[TARGET_COL].values.astype(int)
+
+    print(f"✅ Δεδομένα φορτώθηκαν. X Shape: {X.shape}, y Shape: {y.shape}")
     return X, y
 
 
@@ -48,23 +82,18 @@ def get_data_splits(X, y):
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def objective(trial, X_tr, y_tr, X_v, y_v, normalization_status):
-    # --- ΥΠΕΡ-ΠΑΡΑΜΕΤΡΟΙ ΓΙΑ GRADIENT BOOSTING ---
+def objective(trial, X_tr, y_tr, X_v, y_v):
+    # --- Search Space ---
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 50, 300),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "max_depth": trial.suggest_int("max_depth", 3, 10),
         "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-        # Το random_state βοηθάει να είναι σταθερά τα αποτελέσματα
-        "random_state": 42,
-        "normalization": normalization_status
+        "random_state": 42
     }
 
-    # Φιλτράρουμε το 'normalization' πριν το περάσουμε στο μοντέλο
-    model_params = {k: v for k, v in params.items() if k != 'normalization'}
-
-    model = GradientBoostingClassifier(**model_params)
+    model = GradientBoostingClassifier(**params)
     model.fit(X_tr, y_tr)
 
     # Αξιολόγηση
@@ -80,27 +109,27 @@ def objective(trial, X_tr, y_tr, X_v, y_v, normalization_status):
     return f1
 
 
-def run_experiment_scenario(scenario_name, X_tr, y_tr, X_v, y_v, use_norm, scaler_obj=None):
+def run_experiment_scenario(scenario_name, X_tr, y_tr, X_v, y_v, X_te, y_te):
     print(f"\n🚀 Έναρξη σεναρίου: {scenario_name}")
 
     mlflow_helper.setup_mlflow("Clickbait_GradientBoosting_Comparison")
 
     with mlflow.start_run(run_name=scenario_name) as run:
-        mlflow.log_param("normalization_used", use_norm)
+        # Δεν έχουμε normalization, άρα το λογκάρουμε ως False
+        mlflow.log_param("normalization_used", False)
 
-        # Sampler για σταθερά αποτελέσματα (reproducibility)
+        # Optuna Setup
         sampler = optuna.samplers.TPESampler(seed=42)
         study = optuna.create_study(direction="maximize", sampler=sampler)
 
-        study.optimize(lambda trial: objective(trial, X_tr, y_tr, X_v, y_v, str(use_norm)), n_trials=15)
+        # Τρέχουμε το objective (δεν χρειάζεται πλέον το normalization_status argument)
+        study.optimize(lambda trial: objective(trial, X_tr, y_tr, X_v, y_v), n_trials=15)
 
         print(f"🏆 Best params for {scenario_name}: {study.best_params}")
 
         # --- ΤΕΛΙΚΗ ΕΚΠΑΙΔΕΥΣΗ CHAMPION MODEL ---
         print("⚙️ Εκπαίδευση του Champion Model...")
         best_params = study.best_params
-
-        # Προσθέτουμε το random_state και εδώ για σιγουριά, αν δεν το έβγαλε το optuna
         if "random_state" not in best_params:
             best_params["random_state"] = 42
 
@@ -110,66 +139,36 @@ def run_experiment_scenario(scenario_name, X_tr, y_tr, X_v, y_v, use_norm, scale
         X_full_train = np.concatenate((X_tr, X_v))
         y_full_train = np.concatenate((y_tr, y_v))
 
-        # ... (ο κώδικας που είχες για το fit του final_model) ...
         final_model.fit(X_full_train, y_full_train)
 
-        # Ε. Αποθήκευση του μοντέλου
+        # Αποθήκευση του μοντέλου
         mlflow.sklearn.log_model(final_model, artifact_path="champion_model")
 
-        # --- ΝΕΟ ΚΟΜΜΑΤΙ: ΠΛΗΡΗΣ ΑΞΙΟΛΟΓΗΣΗ ---
-        # Καλούμε τη νέα συνάρτηση από το helper
-        # Χρησιμοποιούμε το X_test που είχαμε κρατήσει στην άκρη και δεν το ακούμπησε κανείς!
+        # --- ΤΕΛΙΚΗ ΑΞΙΟΛΟΓΗΣΗ (TEST SET) ---
         print("📈 Υπολογισμός τελικών μετρικών στο Test Set...")
-
-        # ΠΡΟΣΟΧΗ: Αν έχεις scaler, πρέπει να μετατρέψεις το Test set!
-        if use_norm and scaler_obj is not None:
-            # Χρησιμοποιούμε τον scaler που μόλις εκπαιδεύσαμε/χρησιμοποιήσαμε
-            X_test_final = scaler_obj.transform(X_test)
-        else:
-            X_test_final = X_test
-
-        # Εδώ γίνεται η καταγραφή όλων των γραφημάτων και metrics
-        mlflow_helper.evaluate_and_log_metrics(final_model, X_test_final, y_test, prefix="test")
-
+        
+        # Εδώ το X_te είναι καθαρό (raw), όπως ακριβώς βγήκε από το split
+        mlflow_helper.evaluate_and_log_metrics(final_model, X_te, y_te, prefix="test")
+        
         print(f"✅ Ολοκληρώθηκε. Run ID: {run.info.run_id}")
 
 
 if __name__ == "__main__":
     if not PARQUET_FILE:
-        print("⚠️ ΠΡΟΣΟΧΗ: Δεν έχεις ορίσει το PARQUET_FILE, EMBEDDING_COL ή TARGET_COL!")
+        print("⚠️ ΠΡΟΣΟΧΗ: Δεν έχεις ορίσει τα paths σωστά!")
     else:
-        # 1. Φόρτωση και Split
+        # 1. Φόρτωση Δεδομένων
         X, y = load_and_prep_data()
+        
+        # 2. Διαχωρισμός (Train/Val/Test)
         X_train, X_val, X_test, y_train, y_val, y_test = get_data_splits(X, y)
 
-        # ==========================================
-        # ΠΕΡΙΠΤΩΣΗ 1: ΧΩΡΙΣ NORMALIZATION
-        # ==========================================
+        # 3. ΕΚΤΕΛΕΣΗ ΜΟΝΟ ΤΟΥ RAW DATA ΣΕΝΑΡΙΟΥ
         run_experiment_scenario(
             scenario_name="GB_Raw_Data",
             X_tr=X_train, y_tr=y_train,
             X_v=X_val, y_v=y_val,
-            use_norm=False,
-            scaler_obj=None  # Δεν υπάρχει scaler εδώ
+            X_te=X_test, y_te=y_test  # Περνάμε και το Test set μέσα
         )
 
-        # ==========================================
-        # ΠΕΡΙΠΤΩΣΗ 2: ΜΕ NORMALIZATION
-        # ==========================================
-        print("\n⚖️ Εφαρμογή Normalization (StandardScaler)...")
-        scaler = StandardScaler()
-
-        # Fit μόνο στο Train!
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_val_scaled = scaler.transform(X_val)
-        X_test_scaled = scaler.transform(X_test)
-
-        run_experiment_scenario(
-            scenario_name="GB_Normalized_Data",
-            X_tr=X_train_scaled, y_tr=y_train,
-            X_v=X_val_scaled, y_v=y_val,
-            use_norm=True,
-            scaler_obj=scaler  # Περνάμε τον scaler για αποθήκευση
-        )
-
-        print("\n✅ Ολοκληρώθηκαν και τα δύο σενάρια. Έλεγξε το MLflow UI!")
+        print("\n✅ Τέλος εκτέλεσης!")
