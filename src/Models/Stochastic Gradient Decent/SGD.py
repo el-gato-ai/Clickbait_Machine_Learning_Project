@@ -9,10 +9,6 @@ import time
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score
-
-# --- ΡΥΘΜΙΣΕΙΣ PATHS ---
-# Βρίσκουμε τον φάκελο που είναι το script και πάμε πίσω για να βρούμε το helper
-# (Υποθέτουμε ότι το script τρέχει από τον φάκελο 'Models/Stochastic Gradient Decent')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import mlflow_helper
 
@@ -24,13 +20,7 @@ current_script_path = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_script_path, '../../..'))
 DATA_FOLDER = os.path.join(project_root, 'data', 'clean', 'umap')
 
-
 def load_split_data(data_path):
-    """
-    Φορτώνει τα έτοιμα Train/Valid/Test αρχεία Parquet.
-    Αναγνωρίζει αυτόματα τα UMAP features και τη στήλη 'labels'.
-    Διαχειρίζεται fastparquet/pyarrow και εξωτερικά αρχεία labels.
-    """
     files = {
         "Train": "train_umap_500.parquet",
         "Valid": "valid_umap_500.parquet",
@@ -60,10 +50,7 @@ def load_split_data(data_path):
                 sys.exit(1)
 
         # 2. Εντοπισμός Features (X)
-        # Βρίσκουμε όλες τις στήλες που ξεκινάνε με 'umap_'
         feature_cols = [c for c in df.columns if c.startswith("umap_")]
-
-        # Αν δεν βρεθούν, χρησιμοποιούμε όλες εκτός από τα πιθανά labels
         if not feature_cols:
             feature_cols = [c for c in df.columns if c not in possible_label_cols]
 
@@ -195,7 +182,6 @@ def run_experiment():
     # --- ΦΑΣΗ 2: Champion Model Training (ΞΕΧΩΡΙΣΤΟ RUN) ---
     print("\n👑 ΦΑΣΗ 2: Εκπαίδευση & Αποθήκευση Champion Model...")
 
-    # Ξεκινάμε ΕΝΤΕΛΩΣ ΝΕΟ Run για να ξεχωρίζει στο UI
     with mlflow.start_run(run_name="👑_SGD_Champion_Model") as final_run:
         # Καταγράφουμε τις παραμέτρους του νικητή
         best_params = study.best_params
