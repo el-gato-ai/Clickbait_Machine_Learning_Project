@@ -1,26 +1,32 @@
 import pandas as pd
 import numpy as np
 import optuna
-import warnings
 import mlflow
 import sys
 import os
 import time
 from sklearn.linear_model import SGDClassifier
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score
+
+# --- ΡΥΘΜΙΣΕΙΣ PATHS ---
+# Βρίσκουμε τον φάκελο που είναι το script και πάμε πίσω για να βρούμε το helper
+# (Υποθέτουμε ότι το script τρέχει από τον φάκελο 'Models/Stochastic Gradient Decent')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import mlflow_helper
-
-# Αγνοούμε τα FutureWarnings από βιβλιοθήκες όπως το sklearn ή το optuna
-warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Δυναμικός εντοπισμός των αρχείων δεδομένων
 current_script_path = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_script_path, '../../..'))
 DATA_FOLDER = os.path.join(project_root, 'data', 'clean', 'umap')
 
+
 def load_split_data(data_path):
+    """
+    Φορτώνει τα έτοιμα Train/Valid/Test αρχεία Parquet.
+    - Διαχειρίζεται αυτόματα fastparquet/pyarrow.
+    - Αναγνωρίζει τα features και το label.
+    - Δεν εφαρμόζει scaling (βάσει οδηγίας).
+    """
     files = {
         "Train": "train_umap_500.parquet",
         "Valid": "valid_umap_500.parquet",
@@ -61,29 +67,33 @@ def load_split_data(data_path):
                 label_col = col
                 break
 
-        # Αν δεν βρεθεί label, ψάχνουμε την μοναδική στήλη που έμεινε
+        # Fallback: Αν δεν βρεθεί label, ψάχνουμε για εξωτερικό αρχείο ή την εναπομείνασα στήλη
         if label_col is None:
             remaining = [c for c in df.columns if c not in feature_cols]
             if len(remaining) == 1:
                 label_col = remaining[0]
                 print(f"   ⚠️ {name}: Αυτόματος εντοπισμός label στήλης: '{label_col}'")
+            else:
+                # Έλεγχος για εξωτερικό αρχείο labels
+                prefix = filename.split('_')[0]
+                ext_label_path = os.path.join(data_path, f"{prefix}_labels.csv")
+                if os.path.exists(ext_label_path):
+                    print(f"   ℹ️ {name}: Ανάγνωση labels από εξωτερικό αρχείο ({prefix}_labels.csv)")
+                    df_labels = pd.read_csv(ext_label_path)
+                    y = df_labels.iloc[:, 0].values.astype(int)
+                    # Εδώ πρέπει να ορίσουμε το X και να συνεχίσουμε
+                    X = df[feature_cols].values.astype(np.float32)
+                    loaded_data[name] = (X, y)
+                    print(f"   ✅ {name} loaded: X={X.shape}, y={y.shape}")
+                    continue
+                else:
+                    print(f"⛔ Σφάλμα στο {name}: Δεν βρέθηκε στήλη label.")
+                    sys.exit(1)
 
         if label_col:
-            # Βεβαιωνόμαστε ότι το label δεν είναι στα features
             if label_col in feature_cols:
                 feature_cols.remove(label_col)
-
             y = df[label_col].values.astype(int)
-        else:
-            # Fallback: Έλεγχος για εξωτερικό αρχείο (π.χ. train_labels.csv)
-            prefix = filename.split('_')[0]
-            ext_label_path = os.path.join(data_path, f"{prefix}_labels.csv")
-            if os.path.exists(ext_label_path):
-                print(f"   ℹ️ {name}: Ανάγνωση labels από εξωτερικό αρχείο ({prefix}_labels.csv)")
-                y = pd.read_csv(ext_label_path).iloc[:, 0].values.astype(int)
-            else:
-                print(f"⛔ Σφάλμα στο {name}: Δεν βρέθηκε στήλη label ούτε εξωτερικό αρχείο.")
-                sys.exit(1)
 
         # 4. Μετατροπή σε Numpy Arrays
         X = df[feature_cols].values.astype(np.float32)
@@ -96,6 +106,7 @@ def load_split_data(data_path):
         print(f"   ✅ {name} loaded: X={X.shape}, y={y.shape}")
 
     return loaded_data["Train"], loaded_data["Valid"], loaded_data["Test"]
+
 
 def objective(trial, X_tr, y_tr, X_v, y_v):
     """
@@ -134,18 +145,20 @@ def objective(trial, X_tr, y_tr, X_v, y_v):
 
     metrics = {"val_f1": f1, "val_accuracy": acc, "training_time_sec": training_time}
 
+    # Log στο MLflow με συγκεκριμένο prefix ονόματος
     mlflow_helper.log_optuna_trial(
         trial,
         params,
         metrics,
         model,
-        run_name_prefix="SGD_Trial"  # <--- Ξεκάθαρο όνομα για κάθε trial
+        run_name_prefix="SGD_Trial"
     )
 
     return f1
 
+
 def run_experiment():
-    EXPERIMENT_NAME = "Clickbait_SGD_UMAP_Final"
+    EXPERIMENT_NAME = "Clickbait_SGD_UMAP_Final_NoScaling"
 
     # 1. Setup MLflow
     mlflow_helper.setup_mlflow(EXPERIMENT_NAME)
@@ -154,21 +167,15 @@ def run_experiment():
     # 2. Φόρτωση Δεδομένων
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = load_split_data(DATA_FOLDER)
 
-    # --- ΣΗΜΑΝΤΙΚΟ: Scaling για SGD ---
-    print("⚖️ Εφαρμογή StandardScaler (απαραίτητο για SGD)...")
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_val = scaler.transform(X_val)
-    X_test = scaler.transform(X_test)
-    # ----------------------------------
+    print("ℹ️ Σημείωση: Δεν εφαρμόζεται Feature Scaling (StandardScaler) στα UMAP embeddings.")
 
     # --- ΦΑΣΗ 1: Hyperparameter Tuning ---
     print("\n🔍 ΦΑΣΗ 1: Αναζήτηση Βέλτιστων Παραμέτρων (Optuna)...")
 
-    # Δημιουργούμε ένα Parent Run που θα 'κρύβει' μέσα του όλα τα trials
+    # Parent Run για το Tuning
     with mlflow.start_run(run_name="🔍_SGD_Hyperparameter_Tuning") as tuning_run:
         mlflow.log_param("dataset", "UMAP_500")
-        mlflow.log_param("scaling", "StandardScaler")
+        mlflow.log_param("scaling", "None")
 
         sampler = optuna.samplers.TPESampler(seed=42)
         study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -182,6 +189,7 @@ def run_experiment():
     # --- ΦΑΣΗ 2: Champion Model Training (ΞΕΧΩΡΙΣΤΟ RUN) ---
     print("\n👑 ΦΑΣΗ 2: Εκπαίδευση & Αποθήκευση Champion Model...")
 
+    # Ξεχωριστό Run για το τελικό μοντέλο
     with mlflow.start_run(run_name="👑_SGD_Champion_Model") as final_run:
         # Καταγράφουμε τις παραμέτρους του νικητή
         best_params = study.best_params
@@ -197,7 +205,7 @@ def run_experiment():
 
         final_model = SGDClassifier(**best_params)
 
-        # Ένωση των ήδη scaled δεδομένων
+        # Ένωση των Train + Valid (χωρίς scaling)
         X_full_train = np.concatenate((X_train, X_val))
         y_full_train = np.concatenate((y_train, y_val))
 
@@ -210,7 +218,7 @@ def run_experiment():
         # Log του μοντέλου
         mlflow.sklearn.log_model(final_model, artifact_path="champion_model")
 
-        # Evaluation στο Test set (με όλα τα advanced metrics)
+        # Evaluation στο Test set
         print("📈 Αξιολόγηση στο Test Set...")
         mlflow_helper.evaluate_and_log_metrics(
             final_model,
@@ -222,6 +230,7 @@ def run_experiment():
 
         print(f"\n✅ ΤΕΛΟΣ! Το Champion Model αποθηκεύτηκε στο Run ID: {final_run.info.run_id}")
         print(f"   👉 Αναζητήστε στο MLflow UI το Run με όνομα: '👑_SGD_Champion_Model'")
+
 
 if __name__ == "__main__":
     run_experiment()
