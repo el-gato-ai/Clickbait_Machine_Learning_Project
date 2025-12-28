@@ -2,7 +2,7 @@
 
 This directory packages the scripts that keep the `data/raw/custom` folder fresh with newly scraped Greek clickbait material. Two separate pipelines ship with the repo:
 
-1. `search_agent.py` - a LangChain/Tavily/ChatGPT agent that hunts for recent Greek articles, summarizes them, and logs them into `data/raw/custom/greek_news.xlsx`.
+1. LangChain/Tavily/ChatGPT agent that hunts for recent Greek articles, summarizes them, and logs them into `data/raw/custom/greek_news.xlsx`.
 2. `scrape_lifo.py` - a focused BeautifulSoup scraper that captures the headlines from LIFO's "Most Popular" feeds and saves the result as CSVs under `data/raw/custom/`.
 
 Use them together when you need a mix of curated positives (LIFO) and broader, labeled Greek articles.
@@ -25,7 +25,7 @@ Use them together when you need a mix of curated positives (LIFO) and broader, l
 
 Rename the provided `.env.example` at the project root to `.env`, replace the placeholder values with your API keys, and the scripts will pick it up automatically via `find_dotenv()`.
 
-## 1. LangChain Search Agent (`search_agent.py`)
+## 1. LangChain Search Agent
 
 What it does:
 
@@ -38,11 +38,11 @@ How to run:
 
 ```bash
 cd data_collection
-python search_agent.py
-python search_agent.py --mode clickbait   # to focus on clickbait headlines
+python -m data_collection
+python -m data_collection --mode clickbait   # to focus on clickbait headlines
 ```
 
-By default the main function requests articles from roughly the last 30 days (rolling window based on the current UTC date). If you want a different window or subset, adjust the `start_date`, `end_date`, or `TOPICS` values near the bottom of `search_agent.py` before running. Each execution prints the streaming agent output and reports how many rows were appended to the Excel file.
+By default the main function requests articles from roughly the last 30 days (rolling window based on the current UTC date). If you want a different window or subset, adjust the `start_date`, `end_date`, or `TOPICS` values inside `data_collection/__init__.py` before running. Each execution prints the streaming agent output and reports how many rows were appended to the Excel file.
 
 ## 2. LIFO Most-Popular Scraper (`scrape_lifo.py`)
 

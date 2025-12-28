@@ -17,7 +17,7 @@ RAW_DIR = PROJECT_ROOT / "data" / "raw"
 # ---------------------------------------------------------------------------
 def load_greek_news(raw_dir: Optional[Path] = None) -> pd.DataFrame:
     """
-    Load the custom Greek news Excel file produced by `data_collection/search_agent.py`.
+    Load the custom Greek news Excel file produced by running `python -m data_collection`.
 
     Expected columns (as written by the agent script):
     - timestamp_utc, query, url, title, description, topic

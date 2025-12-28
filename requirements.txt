@@ -1,10 +1,10 @@
 langchain
+langchain-core
 langgraph
-langchain_tavily
-langchain_openai
+langchain-tavily
+langchain-openai
 pydantic
 pandas
-beautifulsoup4
 python-dotenv
 transformers
 torch

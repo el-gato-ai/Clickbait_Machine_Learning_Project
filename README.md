@@ -6,7 +6,7 @@ Experiments, data pipelines, and notebooks for detecting clickbait across Englis
 
 - Data sources documented under `data/raw/` (Kaggle, Webis, GitHub, and custom Greek pulls).
 - Collection scripts in `data_collection/`:
-  - `search_agent.py`: LangChain + Tavily + GPT-5 agent that logs Greek news to `data/raw/custom/greek_news.xlsx`.
+  - LangChain + Tavily + GPT-5 agent (run via `python -m data_collection`) that logs Greek news to `data/raw/custom/greek_news.xlsx`.
   - `scrape_lifo.py`: BeautifulSoup scraper for LIFO “Most Popular” headlines tagged as positives.
 - Modeling utilities in `src/`:
   - `vectorization.py`: Gemma 3 (google/gemma-3-4b-it) mean-pooled hidden-state embeddings.

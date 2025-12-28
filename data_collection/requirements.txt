@@ -1,9 +1,8 @@
 langchain
 langgraph
-langchain_tavily
-langchain_openai
+langchain-core
+langchain-tavily
+langchain-openai
 pydantic
 pandas
-beautifulsoup4
 python-dotenv
-optuna
