@@ -1,68 +1,60 @@
-﻿# Data Collection Toolkit
+# Data Collection Toolkit
 
-This directory packages the scripts that keep the `data/raw/custom` folder fresh with newly scraped Greek clickbait material. Two separate pipelines ship with the repo:
-
-1. LangChain/Tavily/ChatGPT agent that hunts for recent Greek articles, summarizes them, and logs them into `data/raw/custom/greek_news.xlsx`.
-2. `scrape_lifo.py` - a focused BeautifulSoup scraper that captures the headlines from LIFO's "Most Popular" feeds and saves the result as CSVs under `data/raw/custom/`.
-
-Use them together when you need a mix of curated positives (LIFO) and broader, labeled Greek articles.
+This folder contains the LangChain/Tavily agent used to gather news articles (with clickbait or balanced focus) across countries and languages. Results are deduplicated and stored in `../data/raw/custom/custom_news.xlsx`.
 
 ## Prerequisites
 
-- Python 3.10+.
-- The dependencies listed in `requirements.txt`. Install them once you are inside this folder:
-  
+- Python 3.10+
+- Install dependencies from `data_collection/requirements.txt` inside a virtualenv:
+
   ```bash
   cd data_collection
   python -m venv .venv
-  .\\.venv\\Scripts\\activate  # or source .venv/bin/activate on macOS/Linux
+  source .venv/bin/activate  # or .\\.venv\\Scripts\\activate on Windows
   pip install -r requirements.txt
   ```
+  
+- Environment variables in the project root `.env`:
+  - `OPENAI_API_KEY` (for ChatOpenAI)
+  - `TAVILY_API_KEY` (for TavilySearch)
 
-- API keys stored in the project root `.env` file:
-  - `OPENAI_API_KEY` for `ChatOpenAI`.
-  - `TAVILY_API_KEY` for the Tavily news search.
+## Running the search agent
 
-Rename the provided `.env.example` at the project root to `.env`, replace the placeholder values with your API keys, and the scripts will pick it up automatically via `find_dotenv()`.
-
-## 1. LangChain Search Agent
-
-What it does:
-
-- Builds topic-specific queries (Politics, Economy, Sports, Society, Technology, Culture, Fashion).
-- Uses TavilySearch to gather recent Greek articles per topic.
-- Invokes GPT-5 via LangChain to summarize each article (in English) and assign the correct topic label.
-- Appends the deduplicated rows (URL, title, description, topic, timestamps) to `../data/raw/custom/greek_news.xlsx`.
-
-How to run:
+From the repo root:
 
 ```bash
-cd data_collection
-python -m data_collection
-python -m data_collection --mode clickbait   # to focus on clickbait headlines
+# Balanced news, all topics (rolling ~30 days)
+python -m data_collection --country "France" --language "French" --mode news
+
+# Clickbait focus, single topic
+python -m data_collection --country "Germany" --language "German" --mode clickbait --topics Sports
+
+# Multiple topics
+python -m data_collection --country "United States" --language "English" --mode news --topics Politics Economy
+
+# Another language, all topics
+python -m data_collection --country "Spain" --language "Spanish" --mode news
+
+# Custom date range (YYYY-MM-DD)
+python -m data_collection --country "Italy" --language "Italian" --mode news --start-date 2025-01-01 --end-date 2025-01-07
 ```
 
-By default the main function requests articles from roughly the last 30 days (rolling window based on the current UTC date). If you want a different window or subset, adjust the `start_date`, `end_date`, or `TOPICS` values inside `data_collection/__init__.py` before running. Each execution prints the streaming agent output and reports how many rows were appended to the Excel file.
+Flags:
 
-## 2. LIFO Most-Popular Scraper (`scrape_lifo.py`)
+- `--country` (required): Target country/region to bias results and domains (where available).
+- `--language` (required): Language to search/respond in.
+- `--mode`: `news` (default) for balanced coverage, or `clickbait` for sensational headlines.
+- `--topics`: optional space-separated subset (e.g., `Politics Economy`). Defaults to all predefined topics.
+- `--start-date` / `--end-date`: optional date window; defaults to last ~30 days ending today (UTC).
 
-What it does:
+Behavior:
 
-- Fetches `https://www.lifo.gr/mostpopular`, `/7days`, and `/today` with polite headers.
-- Parses the sectioned lists, normalizes the titles, and removes duplicates.
-- Marks every captured headline as `clickbait=1` and persists the merged results to `../data/raw/custom/lifo_mostpopular_7days_today.csv` (plus any suffixed backups you create).
+- Builds topic queries with optional date window (defaults to last ~30 days) and mode.
+- Uses TavilySearch with per-country domain hints when known; otherwise global.
+- GPT formats results into a `NewsResponse` schema and appends new (URL-deduped) rows to `data/raw/custom/custom_news.xlsx`, including `country` and `language` columns.
 
-How to run:
+## Notes
 
-```bash
-cd data_collection
-python scrape_lifo.py
-```
-
-After a successful run you will find a CSV in `data/raw/custom/` containing `section`, `title`, and `clickbait` columns - ideal as a high-precision positive set.
-
-## Tips for Fresh Runs
-
-- Keep an eye on rate limits for both OpenAI and Tavily when looping over long date ranges.
-- If you rotate API keys or environments, rerun `pip install -r requirements.txt` and double-check that `.env` is discoverable (the scripts call `dotenv.load_dotenv()` at import time).
-- Commit the refreshed artifacts in `data/raw/custom/` only if you want them tracked; otherwise, add paths to `.gitignore` before experimenting.
+- Adjust the rolling date window in `data_collection/__init__.py` if you need a different range.
+- Keep an eye on API quotas for both OpenAI and Tavily on multi-topic runs.
+- If you add new countries frequently, extend the domain hints in `data_collection/llms.py` for better targeting.

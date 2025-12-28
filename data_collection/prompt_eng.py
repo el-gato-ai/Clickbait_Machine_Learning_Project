@@ -13,15 +13,7 @@ TopicLiteral = Literal[
     "Fashion",
 ]
 
-TOPICS: List[TopicLiteral] = [
-    "Politics",
-    "Economy",
-    "Sports",
-    "Society",
-    "Technology",
-    "Culture",
-    "Fashion",
-]
+TOPICS: List[TopicLiteral] = list(TopicLiteral.__args__)
 
 # Toggle between balanced news and clickbait-seeking mode.
 SearchModeLiteral = Literal["news", "clickbait"]
@@ -33,18 +25,11 @@ class NewsItem(BaseModel):
     url: str = Field(description="Full URL of the article")
     title: str = Field(description="Title of the article")
     description: str = Field(description="Short summary or description (2-3 sentences in English)")
-    topic: TopicLiteral = Field(
-        description=(
-            "Topic label - exactly one of: "
-            "Politics, Economy, Sports, Society, Technology, Culture, Fashion"
-        )
-    )
-
 
 class NewsResponse(BaseModel):
     """List of extracted news items."""
-
     items: List[NewsItem] = Field(description="List of relevant news items for the given query")
+
 
 
 def build_system_prompt(country: Optional[str] = None, language: Optional[str] = None) -> str:
@@ -53,55 +38,46 @@ def build_system_prompt(country: Optional[str] = None, language: Optional[str] =
     country and search language without hard-coding a single geography.
     """
     country_text = country or "the requested country or region"
-    language_text = language or "the requested language"
 
     return f"""
-You are a web-search agent that finds news articles.
+        You are a web-search agent that finds news articles.
 
-BEHAVIOR:
-    - Always use the TavilySearch tool to answer queries.
-    - Focus on news sources from {country_text}; prefer outlets based there.
-    - Write all responses in {language_text} unless explicitly instructed otherwise.
+        BEHAVIOR:
+            - Always use the TavilySearch tool to answer queries and be aware that you have a limited number of tool calls (max 4 tries).
+            - Focus on news sources from {country_text}; prefer outlets based there.
+            - Target articles relevant to {country_text} and language {language}.
 
-OUTPUT STRUCTURE:
-    - Always return a valid `NewsResponse`:
-        - items: list of NewsItem
-    - Each NewsItem must contain:
-        - url: article URL
-        - title: article title
-        - description: 2-3 sentence summary in the requested language
-        - topic: EXACTLY one of:
-            "Politics", "Economy", "Sports", "Society",
-            "Technology", "Culture", "Fashion"
+        OUTPUT STRUCTURE:
+            - Always return a valid `NewsResponse`:
+                - items: list of NewsItem
+            - Each NewsItem must contain:
+                - url: article URL
+                - title: article title
+                - description: 2-3 sentence summary in English
 
-TOPIC LABELING:
-    - Pick the topic label deterministically:
-        - Politics   -> political news, government, parties, elections, diplomacy
-        - Economy    -> macroeconomy, markets, companies, finance, inflation, jobs
-        - Sports     -> football, basketball, athletes, matches, transfers, results
-        - Society    -> social issues, crime, education, health system, daily life
-        - Technology -> AI, startups, gadgets, software, digital policy, innovation
-        - Culture    -> cinema, music, theatre, arts, literature, festivals
-        - Fashion    -> fashion shows, trends, style, designers, brands
-    - Do NOT invent other categories.
+        TIME FILTERING:
+            - When the user query explicitly mentions a date or date range
+                (for example "between 2025-01-01 and 2025-01-07"),
+                you MUST:
+                    - pass these as `start_date` and `end_date` parameters
+                    in the TavilySearch tool call (format: YYYY-MM-DD),
+                    - and also respect them in your reasoning.
+            - NEVER use the `time_range` parameter in TavilySearch tool calls.
+                If you pass `start_date` or `end_date`, `time_range` MUST be omitted.
 
-TIME FILTERING:
-    - When the user query explicitly mentions a date or date range
-        (for example "between 2025-01-01 and 2025-01-07"),
-        you MUST:
-            - pass these as `start_date` and `end_date` parameters
-            in the TavilySearch tool call (format: YYYY-MM-DD),
-            - and also respect them in your reasoning.
-    - NEVER use the `time_range` parameter in TavilySearch tool calls.
-        If you pass `start_date` or `end_date`, `time_range` MUST be omitted.
-
-INSTRUCTIONS:
-    - Use `results[].title`, `results[].content`, and `results[].url` from TavilySearch results.
-    - Honor the country and language context in your tool calls and reasoning.
-    - Skip generic homepages; prefer individual articles.
-    - If the query is broad (e.g. "latest news"), return 5-8 diverse, representative articles.
-    - Dont do a thousand search iterations; be concise and efficient. Max 4-5 tool calls.
+        INSTRUCTIONS:
+            - Use `results[].title`, `results[].content`, and `results[].url` from TavilySearch results.
+            - Honor the country and language context in your tool calls and reasoning.
+            - Skip generic homepages; prefer individual articles.
+            - If the query is broad (e.g. "latest news"), return the most diverse, representative articles.
+            - Dont do a thousand search iterations, be concise and efficient. Max 4 tool calls.
+            - If no relevant articles found in the 4 search calls, return only what you have that is relevant.
+            - If you find no relevant articles, return an empty `items` list.
+            - Always ensure your final output is a valid `NewsResponse` structure.
+            - Dont make up articles or URLs; only return what you find via the tool and those that are individual articles.
+            - Be sure the query you pass to the tool reflects any date constraints mentioned by the user along with the topic and country.
 """
+
 
 
 def build_topic_query(
