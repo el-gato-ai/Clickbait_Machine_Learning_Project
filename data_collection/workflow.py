@@ -49,7 +49,7 @@ def append_news_to_excel(
     topic: Optional[TopicLiteral] = None,
 ) -> int:
     """
-    Append news items to Excel, deduplicating by URL + title.
+    Append news items to Excel, deduplicating by URL.
     Returns the number of NEW rows appended.
     """
     now = datetime.utcnow().isoformat()
@@ -78,31 +78,15 @@ def append_news_to_excel(
     if excel_path.exists():
         existing_df = _sanitize_dataframe_text(pd.read_excel(excel_path))
         existing_urls = set(existing_df["url"].astype(str).tolist()) if "url" in existing_df.columns else set()
-        if {"url", "title"}.issubset(existing_df.columns):
-            existing_pairs = set(
-                zip(existing_df["url"].astype(str).tolist(), existing_df["title"].astype(str).tolist())
-            )
-        else:
-            existing_pairs = set()
     else:
         existing_df = None
-        existing_pairs = set()
         existing_urls = set()
 
-    # Deduplicate new data against existing by (url, title) pairs, falling back to url only.
-    new_pairs = new_df.apply(lambda r: (str(r["url"]), str(r["title"])), axis=1)
-    if existing_pairs:
-        dedupe_mask = new_pairs.isin(existing_pairs)
-    elif existing_urls:
-        dedupe_mask = new_df["url"].astype(str).isin(existing_urls)
-    else:
-        dedupe_mask = pd.Series(False, index=new_df.index)
-
-    # Filter to only truly new rows.
-    filtered_df = new_df[~dedupe_mask]
+    # Deduplicate new data against existing by URL only.
+    filtered_df = new_df[~new_df["url"].astype(str).isin(existing_urls)]
 
     if filtered_df.empty:
-        print("[after_model] No new URL+title combos to add (all duplicates).")
+        print("[after_model] No new URLs to add (all duplicates).")
         return 0
 
     combined_df = (
@@ -152,7 +136,7 @@ def make_save_news_after_model(
         )
         print(
             f"[after_model] Appended {added} new rows to {EXCEL_PATH} "
-            f"(deduped by URL + title, URL fallback if missing title). topic={default_topic}, country={country}, language={language}"
+            f"(deduped by URL). topic={default_topic}, country={country}, language={language}"
         )
 
         return None
@@ -214,6 +198,18 @@ def stream_news_agent(
         msg = messages[-1]
         role = getattr(msg, "role", msg.__class__.__name__)
         content = getattr(msg, "content", "")
+
+        # Surface tool calls even when the model leaves content empty.
+        tool_calls = getattr(msg, "tool_calls", None)
+        if (content is None or content == "") and tool_calls:
+            rendered_calls = []
+            for call in tool_calls:
+                name = getattr(call, "name", None) or (call.get("name") if isinstance(call, dict) else None) or "tool"
+                args = getattr(call, "args", None)
+                if args is None and isinstance(call, dict):
+                    args = call.get("args")
+                rendered_calls.append(f"{name}({args})")
+            content = f"[tool_call] {'; '.join(rendered_calls)}"
 
         if isinstance(content, list):
             content = "".join(
