@@ -1,0 +1,22 @@
+artifact_path: file:///Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/176203313038895818/models/m-11223ec66e124e829ece6083c7b53cc5/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.12
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+mlflow_version: 3.8.0
+model_id: m-11223ec66e124e829ece6083c7b53cc5
+model_size_bytes: 2497177
+model_uuid: m-11223ec66e124e829ece6083c7b53cc5
+prompts: null
+run_id: 1a6dfd558c50490f841b99bd3061d109
+utc_time_created: '2025-12-25 09:34:09.864666'

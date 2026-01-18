@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/236777006947026757/84eb0c1d7bcc4a55bf2432afd5b9e303/artifacts
+end_time: 1766695955397
+entry_point_name: ''
+experiment_id: '236777006947026757'
+lifecycle_stage: active
+run_id: 84eb0c1d7bcc4a55bf2432afd5b9e303
+run_name: SGD_Trial_14
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1766695955393
+status: 3
+tags: []
+user_id: nikosgatos

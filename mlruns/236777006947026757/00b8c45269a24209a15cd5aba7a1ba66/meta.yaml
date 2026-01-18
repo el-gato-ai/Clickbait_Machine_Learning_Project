@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/236777006947026757/00b8c45269a24209a15cd5aba7a1ba66/artifacts
+end_time: 1766695957193
+entry_point_name: ''
+experiment_id: '236777006947026757'
+lifecycle_stage: active
+run_id: 00b8c45269a24209a15cd5aba7a1ba66
+run_name: "\U0001F50D_SGD_Hyperparameter_Tuning"
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1766695947892
+status: 3
+tags: []
+user_id: nikosgatos
