@@ -1,8 +1,8 @@
-# 📂 Notebook Suite: Clickbait Detection with UMAP & ML
+#  Notebook Suite: Clickbait Detection with UMAP & ML
 
 This folder contains the complete end-to-end workflow for the **Clickbait Detection Thesis**. The pipeline ranges from raw data preprocessing and dimensionality reduction using **UMAP** on **Gemma LLM Embeddings** to advanced model training, hyperparameter tuning via **Optuna**, and experiment tracking with **MLflow**.
 
-## 🚀 Main Pipeline (Data Prep)
+##  Main Pipeline (Data Prep)
 
 The foundational steps to prepare the text data and generate embeddings.
 
@@ -15,17 +15,17 @@ The foundational steps to prepare the text data and generate embeddings.
 
 ---
 
-## 🧪 Modeling Experiments (The Core Analysis)
+##  Modeling Experiments (The Core Analysis)
 
 This section contains the training scripts converted into interactive notebooks. Each notebook performs Hyperparameter Tuning (Optuna) and tracks metrics via MLflow.
 
-### 🏆 Champion Model
+###  Best Model
 - **`06_Gradient_Booster.ipynb`**: 
   - Implementation of the **Gradient Boosting Classifier**.
   - **Result:** Best performing model (~91% Accuracy, ~0.88 F1).
   - Demonstrates robustness to unscaled UMAP features derived from Gemma.
 
-### 📉 Linear & Distance-Based Models (The Scaling Study)
+###  Linear & Distance-Based Models (The Scaling Study)
 A critical part of this thesis was investigating the "Scaling Paradox" on UMAP embeddings.
 
 - **`05_Logistic_Regression_NoScaling.ipynb`**: 
@@ -39,12 +39,12 @@ A critical part of this thesis was investigating the "Scaling Paradox" on UMAP e
 - **`05_SVM_Scaled.ipynb`**: 
   - SVM with Standard Scaling (traditional approach), which failed to converge efficiently.
 
-### ⚡ Baselines
+### Baselines
 - **`SGD.ipynb`**: Stochastic Gradient Descent classifier as a lightweight baseline.
 
 ---
 
-## 📊 Evaluation & Conclusions
+##  Evaluation & Conclusions
 
 - **`07_Results_Discussion.ipynb`**: 
   - Consolidated analysis of all experiments.
@@ -53,7 +53,7 @@ A critical part of this thesis was investigating the "Scaling Paradox" on UMAP e
 
 ---
 
-## 🛠️ Tech Stack & How to Use
+## ️ Tech Stack & How to Use
 
 - **Embeddings Source**: Google Gemma LLM.
 - **Dimensionality Reduction**: UMAP (Uniform Manifold Approximation and Projection).
