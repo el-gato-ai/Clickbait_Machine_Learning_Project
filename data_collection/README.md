@@ -1,6 +1,6 @@
 # Data Collection Toolkit
 
-This folder contains the LangChain/Tavily agent used to gather news articles (with clickbait or balanced focus) across countries and languages. Results are deduplicated and stored in `../data/raw/custom/custom_news.xlsx`.
+This folder contains the LangChain + Tavily agent used to gather news articles (clickbait or balanced) across countries and languages. Results are URL-deduplicated and appended to `data/raw/custom/custom_news.xlsx`.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ This folder contains the LangChain/Tavily agent used to gather news articles (wi
   source .venv/bin/activate  # or .\\.venv\\Scripts\\activate on Windows
   pip install -r requirements.txt
   ```
-  
+
 - Environment variables in the project root `.env`:
   - `OPENAI_API_KEY` (for ChatOpenAI)
   - `TAVILY_API_KEY` (for TavilySearch)
@@ -43,15 +43,15 @@ Flags:
 
 - `--country` (required): Target country/region to bias results and domains (where available).
 - `--language` (required): Language to search/respond in.
-- `--mode`: `news` (default) for balanced coverage, or `clickbait` for sensational headlines.
-- `--topics`: optional space-separated subset (e.g., `Politics Economy`). Defaults to all predefined topics.
+- `--mode`: `clickbait` (default) for sensational headlines, or `news` for balanced coverage.
+- `--topics`: optional space-separated subset (e.g., `Politics Economy`). Defaults to all predefined topics in `data_collection/prompt_eng.py`.
 - `--start-date` / `--end-date`: optional date window; defaults to last ~30 days ending today (UTC).
 
-Behavior:
+## Output schema
 
-- Builds topic queries with optional date window (defaults to last ~30 days) and mode.
-- Uses TavilySearch with per-country domain hints when known; otherwise global.
-- GPT formats results into a `NewsResponse` schema and appends new (URL-deduped) rows to `data/raw/custom/custom_news.xlsx`, including `country` and `language` columns.
+Each appended row includes:
+
+- `timestamp_utc`, `query`, `url`, `title`, `description`, `topic`, `country`, `language`
 
 ## Notes
 

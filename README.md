@@ -2,54 +2,64 @@
 
 Experiments, data pipelines, and notebooks for detecting clickbait across multiple news sources and languages.
 
-## What’s here
+## Repository map
 
-- Data sources documented under `data/raw/` (Kaggle, Webis, GitHub, and custom pulls).
-- Collection scripts in `data_collection/`:
-  - LangChain + Tavily + GPT-4.1 agent (run via `python -m data_collection`) that logs country/language-specific news to `data/raw/custom/custom_news.xlsx`.
-- Modeling utilities in `src/`:
-  - `vectorization.py`: Gemma 3 (google/gemma-3-4b-it) mean-pooled hidden-state embeddings.
-  - `__init__.py`: helpers to load a dataset, embed titles, and save embeddings next to the code.
-- Notebook pipeline in `notebooks/` from data overview through evaluation.
+- `data/`: raw sources plus merged/cleaned/embedded outputs (see `data/README.md`).
+- `data_collection/`: LangChain + Tavily agent that gathers headlines into `data/raw/custom/custom_news.xlsx` (see `data_collection/README.md`).
+- `notebooks/`: end-to-end analysis pipeline and modeling experiments (see `notebooks/README.md`).
+- `src/`: reusable Python modules (vectorization, EDA, feature engineering, MLflow helpers).
+- `mlruns/`: MLflow tracking artifacts created by local runs.
 
-## Quick start
+## Key directories
 
-- Python 3.10+. Create a venv and install project requirements (plus `data_collection/requirements.txt` if using the agent).
+### data/
+
+Raw sources live in `data/raw` with provenance notes, while `data/merged` and `data/clean` hold intermediate outputs from the notebooks. Embeddings are written to `data/embedded` by the vectorization pipeline.
+
+### data_collection/
+
+The search agent builds topic queries with a rolling date window and writes URL-deduplicated results into `data/raw/custom/custom_news.xlsx`. Use this when you want fresh, country/language-specific headlines.
+
+### notebooks/
+
+The main pipeline starts at `01_data_overview.ipynb` and flows through cleaning, feature engineering, modeling, and evaluation. Side experiments (e.g., SGD, Gradient Boosting) live alongside the core notebooks.
+
+### src/
+
+Reusable code for embeddings (`src/vectorization`), EDA helpers (`src/eda`), feature engineering (`src/feature_eng`), and MLflow logging (`src/Models`).
+
+### mlruns/
+
+Local MLflow run artifacts produced by training notebooks and helpers. Safe to delete and regenerate.
+
+## Setup
+
+- Python 3.10+. Create a virtualenv and install `requirements.txt`.
+- If you plan to run the collection agent, also install `data_collection/requirements.txt`.
 - Copy `.env.example` to `.env` and set:
-  - `OPENAI_API_KEY`, `TAVILY_API_KEY` for `data_collection` tools.
-  - `HUGGINGFACE_TOKEN` for Gemma downloads.
-- Run the collection agent to refresh `data/raw/custom/custom_news.xlsx` (examples below).
-- Use the notebooks in order (`01_` to `06_`) for the full modeling narrative.
+  - `OPENAI_API_KEY` and `TAVILY_API_KEY` for data collection.
+  - `HUGGINGFACE_TOKEN` for Gemma downloads in vectorization.
 
-### Collection agent usage
+## Common workflows
 
-From the repo root:
+### Collect fresh headlines (optional)
 
 ```bash
-# Balanced news, all topics, rolling ~30 days
 python -m data_collection --country "France" --language "French" --mode news
-
-# Clickbait focus, single topic
-python -m data_collection --country "Germany" --language "German" --mode clickbait --topics Sports
-
-# Multiple topics
-python -m data_collection --country "United States" --language "English" --mode news --topics Politics Economy
-
-# Another language, all topics
-python -m data_collection --country "Spain" --language "Spanish" --mode news
-
-# Custom date range (YYYY-MM-DD)
-python -m data_collection --country "Italy" --language "Italian" --mode news --start-date 2025-01-01 --end-date 2025-01-07
 ```
 
-Flags:
+The agent defaults to `--mode clickbait` and a ~30-day UTC date window when omitted.
 
-- `--country` (required): Target country/region to bias the search.
-- `--language` (required): Language for search/output.
-- `--mode`: `news` (default) or `clickbait`.
-- `--topics`: optional space-separated subset of topics; defaults to all.
-- `--start-date` / `--end-date`: optional date window; defaults to last ~30 days ending today (UTC).
+### Generate embeddings
 
-## Embeddings shortcut
+Run the batch embedding pipeline over everything in `data/raw`:
 
-- Call `embed_titles` in `src/__init__.py` to read a CSV/Excel (e.g., `data/raw/kaggle/clickbait_data.csv`), keep the title column, generate embeddings, and save a Parquet file alongside `vectorization.py`.
+```bash
+python -m src.vectorization
+```
+
+This writes flattened embedding files under `data/embedded/<model_name>/`.
+
+### Notebook pipeline
+
+Start with `notebooks/01_data_overview.ipynb` and follow the sequence in `notebooks/README.md`.
