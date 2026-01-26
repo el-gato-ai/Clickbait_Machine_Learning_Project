@@ -1,67 +1,84 @@
-#  Notebook Suite: Clickbait Detection with UMAP & ML
+# Clickbait Detection using Gemma LLM & UMAP
 
-This folder contains the complete end-to-end workflow for the **Clickbait Detection Thesis**. The pipeline ranges from raw data preprocessing and dimensionality reduction using **UMAP** on **Gemma LLM Embeddings** to advanced model training, hyperparameter tuning via **Optuna**, and experiment tracking with **MLflow**.
+This repository contains the end-to-end machine learning workflow for my thesis on **Clickbait Detection**. The project utilizes state-of-the-art **Google Gemma LLM** embeddings, dimensionality reduction via **UMAP**, and a rigorous comparative analysis of various classifiers.
 
-##  Main Pipeline (Data Prep)
-
-The foundational steps to prepare the text data and generate embeddings.
-
-- **`01_data_overview.ipynb`**: Sanity checks on raw sources, exploratory data analysis (EDA), and label balance inspection.
-- **`02_clean_merge.ipynb`**: Text cleaning, normalization, and merging across different dataset sources.
-- **`03_feature_engineering_umap.ipynb`**: 
-  - Generation of embeddings using **Google's Gemma LLM**.
-  - Dimensionality reduction using **UMAP** (500 components).
-  - Splitting into Train/Validation/Test sets (saved as Parquet).
+A key scientific finding of this work is the **"Scaling Paradox"**, where distance-based models performed significantly better on *raw* UMAP embeddings compared to standard-scaled ones.
 
 ---
 
-##  Modeling Experiments (The Core Analysis)
+##  Project Pipeline
 
-This section contains the training scripts converted into interactive notebooks. Each notebook performs Hyperparameter Tuning (Optuna) and tracks metrics via MLflow.
+The notebooks are numbered to reflect the execution order.
 
-###  Best Model
+### 1. Data Preparation & Feature Engineering
+The foundational steps to process text and generate semantic features.
+
+- **`01_data_overview.ipynb`**: Exploratory Data Analysis (EDA), sanity checks on raw sources, and label balance inspection.
+- **`02_clean_merge.ipynb`**: Text cleaning, normalization, and merging distinct dataset sources into a unified corpus.
+- **`03_feature_engineering.ipynb`**: **(Critical Step)**
+  - Generating high-dimensional embeddings using **Google's Gemma LLM**.
+  - Applying **UMAP** to reduce dimensions to 500 components while preserving topological structure.
+  - Splitting data into Train/Validation/Test sets (saved as Parquet).
+
+### 2. Preliminary Modeling
+- **`04_modeling_embeddings.ipynb`**: Initial experimental runs to gauge general model performance on embeddings.
+- **`05_evaluation_report.ipynb`**: Early evaluation metrics and error analysis scripts.
+
+---
+
+##  The Experiments: Scaling & Architecture Study
+
+This section constitutes the core research. We investigate how different algorithm families (Trees vs. Linear vs. Kernels) interact with the geometry of UMAP embeddings. All experiments use **Optuna** for hyperparameter tuning and **MLflow** for tracking.
+
+### Best Model
 - **`06_Gradient_Booster.ipynb`**: 
-  - Implementation of the **Gradient Boosting Classifier**.
-  - **Result:** Best performing model (~91% Accuracy, ~0.88 F1).
-  - Demonstrates robustness to unscaled UMAP features derived from Gemma.
+  - Implementation of **Gradient Boosting Classifier**.
+  - **Result:** Top performance (~91% Accuracy, ~0.88 F1).
+  - Demonstrates robustness to unscaled features and non-linear decision boundaries.
 
-###  Linear & Distance-Based Models (The Scaling Study)
-A critical part of this thesis was investigating the "Scaling Paradox" on UMAP embeddings.
+###  The Scaling Study (Linear Models)
+Investigating the impact of `StandardScaler` on UMAP manifolds.
 
-- **`05_Logistic_Regression_NoScaling.ipynb`**: 
-  - Training on **raw UMAP embeddings**.
-  - **Key Finding:** High performance (~0.86 F1), proving UMAP's ability to "unroll" the Gemma manifold into a linearly separable space.
-- **`05_Logistic_Regression_Scaled.ipynb`**: 
-  - Training with `StandardScaler`.
-  - **Observation:** Significant performance drop (~0.70 F1) due to topological distortion.
-- **`05_SVM_NoScaling.ipynb`**: 
-  - SVM with RBF Kernel on raw data.
-- **`05_SVM_Scaled.ipynb`**: 
-  - SVM with Standard Scaling (traditional approach), which failed to converge efficiently.
+- **`09_Log_Reg_No_Scaling.ipynb`**: 
+  - Logistic Regression on **raw** UMAP data.
+  - **Result:** Excellent performance (~0.86 F1), proving UMAP successfully "unrolled" the Gemma manifold into a linearly separable space.
+- **`08_Log_Reg_Scaled.ipynb`**: 
+  - Logistic Regression with **StandardScaling**.
+  - **Observation:** Performance drop (~0.70 F1) due to distortion of density-based information encoded by UMAP.
+- **`07_SGD.ipynb`**: 
+  - Stochastic Gradient Descent baseline.
 
-### Baselines
-- **`SGD.ipynb`**: Stochastic Gradient Descent classifier as a lightweight baseline.
-
----
-
-##  Evaluation & Conclusions
-
-- **`07_Results_Discussion.ipynb`**: 
-  - Consolidated analysis of all experiments.
-  - Comparative visualizations (Bar charts, Leaderboards).
-  - Final discussion on **Tree-based vs. Linear models** and the impact of normalization on manifold learning.
+###  The Scaling Study (SVM)
+- **`11_SVM_No_Scaling.ipynb`**: 
+  - SVM (RBF Kernel) on **raw** UMAP data.
+- **`10_SVM_Scaled.ipynb`**: 
+  - SVM with **StandardScaling**.
+  - **Observation:** Failed to converge efficiently and showed degraded performance compared to the unscaled version.
 
 ---
 
-## ️ Tech Stack & How to Use
+##  Final Conclusions
 
-- **Embeddings Source**: Google Gemma LLM.
-- **Dimensionality Reduction**: UMAP (Uniform Manifold Approximation and Projection).
-- **Experiment Tracking**: All runs are logged in `mlruns/` via **MLflow**.
-- **Optimization**: Hyperparameters are tuned using **Optuna** (TPE Sampler).
-- **Data Format**: Large files use `.parquet` format and are tracked via **Git LFS**.
+- **`Results.ipynb`**: 
+  - **The Final Report.** Consolidated analysis of all 11 notebooks.
+  - Contains comparative visualizations (Bar charts, Leaderboards).
+  - Scientific discussion on why **Gradient Boosting** won and why **Scaling** harmed the topological features of Gemma+UMAP.
 
-### Instructions
-1. Ensure data is located in `data/clean/umap/`.
-2. Run the **Modeling** notebooks to reproduce training and artifact generation (models & scalers).
-3. Open `07_Results_Discussion.ipynb` to view the final comparative report.
+---
+
+## ️ Tech Stack
+
+- **LLM / Embeddings**: Google Gemma
+- **Dimensionality Reduction**: UMAP
+- **Orchestration**: Python, Jupyter
+- **Tracking**: MLflow
+- **Optimization**: Optuna
+- **Data Management**: Git LFS (for large .parquet files)
+
+## How to Reproduce
+
+1. **Install Dependencies**: Ensure `umap-learn`, `optuna`, `mlflow`, `scikit-learn`, `xgboost` are installed.
+2. **Data**: Place raw data in `data/raw/` (or ensure `data/clean/umap/` contains the parquet files).
+3. **Run Pipeline**: Execute notebooks `01` through `03` to generate features.
+4. **Run Experiments**: Execute notebooks `06` through `11` to train models and log artifacts.
+5. **View Results**: Open `Results.ipynb` for the summary.
