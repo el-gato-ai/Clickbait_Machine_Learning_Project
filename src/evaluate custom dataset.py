@@ -1,11 +1,12 @@
 import pandas as pd
+from pathlib import Path
 import numpy as np
-import mlflow
-import sys
-import os
 import joblib
+import mlflow
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sys
+import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 
@@ -20,42 +21,39 @@ except ImportError:
     try:
         import mlflow_helper
     except:
-        print("⚠️ Warning: mlflow_helper module not found. Skipping helper functions.")
+        pass # mlflow_helper is optional
 
 # ==========================================
 # ⚙️ ΡΥΘΜΙΣΕΙΣ ΧΡΗΣΤΗ
 # ==========================================
-
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # 1. Path του Gold Dataset (Test set)
-CUSTOM_DATA_PATH = r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/data/clean/umap/custom_news_umap_500.parquet"
-
-# 2. Path του TRAIN Dataset (Απαραίτητο για να φτιάξουμε τον Scaler!)
-TRAIN_DATA_PATH = r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/data/clean/umap/train_umap_500.parquet"
+CUSTOM_DATA_PATH = PROJECT_ROOT / "data" / "clean" / "umap" / "custom_news_umap_500.parquet"
+TRAIN_DATA_PATH = PROJECT_ROOT / "data" / "clean" / "umap" / "train_umap_500.parquet"
 
 # 3. Τα Paths των .pkl αρχείων
 MODELS_TO_EVALUATE = {
     "Gradient_Boosting": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/176203313038895818/models/m-11223ec66e124e829ece6083c7b53cc5/artifacts/model.pkl",
-        "needs_scaling": False
+        "path": PROJECT_ROOT / "mlruns" / "176203313038895818" / "models" / "m-11223ec66e124e829ece6083c7b53cc5" / "artifacts" / "model.pkl"
     },
     "Logistic_Regression_NoScaling": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/961020367779049974/models/m-f5332dd335424d659711f5acb87d7eda/artifacts/model.pkl",
+        "path": PROJECT_ROOT / "mlruns" / "961020367779049974" / "models" / "m-f5332dd335424d659711f5acb87d7eda" / "artifacts" / "model.pkl",
         "needs_scaling": False
     },
     "SVM_NoScaling": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/664524367874882829/models/m-316b355112e14df284738170b470bf27/artifacts/model.pkl",
+        "path": PROJECT_ROOT / "mlruns" / "664524367874882829" / "models" / "m-316b355112e14df284738170b470bf27" / "artifacts" / "ts/model.pkl",
         "needs_scaling": False
     },
     "SGD_Classifier": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/236777006947026757/models/m-022afa5b1f9848768d11c9390253ec71/artifacts/model.pkl",
+        "path": PROJECT_ROOT / "mlruns" / "236777006947026757" / "models" / "m-022afa5b1f9848768d11c9390253ec71" / "artifacts" / "model.pkl",
         "needs_scaling": False
     },
     "SVM_Scaled": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/629225326235206482/models/m-f917c98e8f4c4e0f895ef460199ce813/artifacts/model.pkl",
+        "path": PROJECT_ROOT / "mlruns" / "629225326235206482" / "models" / "m-f917c98e8f4c4e0f895ef460199ce813" / "artifacts" / "model.pkl",
         "needs_scaling": True
     },
     "Logistic_Regression_Scaled": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/444470392771103284/models/m-ad71b18c165c4043b615b5fc234a675d/artifacts/model.pkl",
+        "path": PROJECT_ROOT / "mlruns" / "444470392771103284" / "models" / "m-ad71b18c165c4043b615b5fc234a675d" / "artifacts" / "model.pkl",
         "needs_scaling": True
     },
 }
@@ -106,7 +104,7 @@ def load_data(path, is_train=False):
         sys.exit(1)
 
     try:
-        df = pd.read_parquet(path, engine='fastparquet')
+        df = pd.read_parquet(path, engine='fastparqu # Fallback to pyarrowet')
     except:
         df = pd.read_parquet(path, engine='pyarrow')
 
@@ -126,6 +124,7 @@ def load_data(path, is_train=False):
             feature_cols = sorted(numeric_named_cols, key=lambda x: int(x))
             print(f"   ⚠️ Δεν βρέθηκε 'umap_' prefix. Χρήση αριθμητικών στηλών ({len(feature_cols)} dims).")
 
+        # Filter for numeric columns that are not in the exclude list
     # Αν ακόμα δεν βρήκαμε, ψάχνουμε όλες τις float στήλες (έσχατη λύση)
     if not feature_cols:
         exclude = ['NG', 'TK', 'KB', 'label', 'labels', 'target', 'text', 'title']
