@@ -7,44 +7,47 @@ import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
 
 # --- ΡΥΘΜΙΣΕΙΣ PATHS ---
+# Προσθήκη του φακέλου src/Models στο path για να βρει το mlflow_helper
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'Models')))
 try:
     import mlflow_helper
 except ImportError:
     # Fallback αν τρέχει από άλλο φάκελο
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    import mlflow_helper
+    try:
+        import mlflow_helper
+    except:
+        print("⚠️ Warning: mlflow_helper module not found. Skipping helper functions.")
 
 # ==========================================
 # ⚙️ ΡΥΘΜΙΣΕΙΣ ΧΡΗΣΤΗ
 # ==========================================
 
 # 1. Path του Gold Dataset (Test set)
-CUSTOM_DATA_PATH = r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/data/clean/umap/test_umap_500.parquet"
+CUSTOM_DATA_PATH = r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/data/clean/umap/custom_news_umap_500.parquet"
 
 # 2. Path του TRAIN Dataset (Απαραίτητο για να φτιάξουμε τον Scaler!)
 TRAIN_DATA_PATH = r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/data/clean/umap/train_umap_500.parquet"
 
 # 3. Τα Paths των .pkl αρχείων
 MODELS_TO_EVALUATE = {
-    # Μοντέλα που θέλουν RAW data (χωρίς Scaling)
-    "SGD_Classifier": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/236777006947026757/models/m-022afa5b1f9848768d11c9390253ec71/artifacts/model.pkl",
-        "needs_scaling": False
-    },
     "Gradient_Boosting": {
         "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/176203313038895818/models/m-11223ec66e124e829ece6083c7b53cc5/artifacts/model.pkl",
+        "needs_scaling": False
+    },
+    "Logistic_Regression_NoScaling": {
+        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/961020367779049974/models/m-f5332dd335424d659711f5acb87d7eda/artifacts/model.pkl",
         "needs_scaling": False
     },
     "SVM_NoScaling": {
         "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/664524367874882829/models/m-316b355112e14df284738170b470bf27/artifacts/model.pkl",
         "needs_scaling": False
     },
-    "Logistic_Regression_NoScaling": {
-        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/961020367779049974/models/m-f5332dd335424d659711f5acb87d7eda/artifacts/model.pkl",
+    "SGD_Classifier": {
+        "path": r"/Users/nikosgatos/PycharmProjects/Clickbait_Machine_Learning_Project/mlruns/236777006947026757/models/m-022afa5b1f9848768d11c9390253ec71/artifacts/model.pkl",
         "needs_scaling": False
     },
     "SVM_Scaled": {
@@ -57,57 +60,145 @@ MODELS_TO_EVALUATE = {
     },
 }
 
-NEW_EXPERIMENT_NAME = "Final_Evaluation_Rescaled"
+NEW_EXPERIMENT_NAME = "Custom_Dataset_Evaluation"
 
 
 # ==========================================
 
-def load_data(path):
+def calculate_majority_vote(df):
+    """
+    Υπολογίζει το τελικό label με βάση την πλειοψηφία των annotators (NG, TK, KB).
+    """
+    annotators = ['NG', 'TK', 'KB']
+
+    # Έλεγχος αν υπάρχουν οι στήλες
+    found_annotators = [col for col in annotators if col in df.columns]
+
+    if len(found_annotators) < 1:
+        return None, None
+
+    print(f"   👥 Εντοπίστηκαν Annotators: {found_annotators}")
+
+    # Μετατροπή σε numeric (αν είναι strings '0', '1')
+    for col in found_annotators:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+    # Majority Vote Logic
+    if len(found_annotators) >= 2:
+        # Άθροισμα ψήφων
+        votes = df[found_annotators].sum(axis=1)
+        # Αν οι ψήφοι είναι περισσότερες από τους μισούς (π.χ. >= 2 για 3 άτομα)
+        majority_threshold = len(found_annotators) / 2
+        y = (votes > majority_threshold).astype(int).values
+        print(f"   🗳️ Majority Vote applied (Threshold > {majority_threshold})")
+    else:
+        # Αν υπάρχει μόνο ένας annotator, παίρνουμε αυτόν
+        y = df[found_annotators[0]].values.astype(int)
+        print(f"   👤 Single Annotator used: {found_annotators[0]}")
+
+    return y, "majority_vote"
+
+
+def load_data(path, is_train=False):
     print(f"   📂 Loading: {os.path.basename(path)}...")
     if not os.path.exists(path):
         print(f"❌ Το αρχείο δεν βρέθηκε: {path}")
         sys.exit(1)
+
     try:
         df = pd.read_parquet(path, engine='fastparquet')
     except:
         df = pd.read_parquet(path, engine='pyarrow')
 
-    feature_cols = [c for c in df.columns if c.startswith("umap_")]
+    # --- 1. FEATURE DETECTION ---
+    # Ψάχνουμε για στήλες που ξεκινάνε με "umap_"
+    feature_cols = [c for c in df.columns if str(c).startswith("umap_")]
 
-    # Εντοπισμός Label (αν υπάρχει)
-    possible_labels = ['label', 'labels', 'target', 'is_clickbait', 'class']
-    label_col = next((c for c in possible_labels if c in df.columns), None)
+    # Αν δεν βρεθούν, ψάχνουμε για στήλες που είναι ΑΡΙΘΜΟΙ (π.χ. "0", "1", ... "499")
+    if not feature_cols:
+        # Φιλτράρουμε στήλες που το όνομά τους είναι αριθμός
+        # Προσέχουμε να είναι integer strings ("0", "1") ή integers (0, 1)
+        numeric_named_cols = [c for c in df.columns if str(c).isdigit()]
 
+        # Συνήθως τα embeddings είναι οι στήλες 0 έως 499
+        if len(numeric_named_cols) >= 50:  # Αν βρούμε πολλές τέτοιες στήλες
+            # Τις ταξινομούμε για να είμαστε σίγουροι (0, 1, 2...)
+            feature_cols = sorted(numeric_named_cols, key=lambda x: int(x))
+            print(f"   ⚠️ Δεν βρέθηκε 'umap_' prefix. Χρήση αριθμητικών στηλών ({len(feature_cols)} dims).")
+
+    # Αν ακόμα δεν βρήκαμε, ψάχνουμε όλες τις float στήλες (έσχατη λύση)
+    if not feature_cols:
+        exclude = ['NG', 'TK', 'KB', 'label', 'labels', 'target', 'text', 'title']
+        feature_cols = [c for c in df.columns if c not in exclude and pd.api.types.is_float_dtype(df[c])]
+
+    if not feature_cols:
+        raise ValueError(f"❌ Δεν βρέθηκαν features (embeddings) στο αρχείο! Στήλες: {df.columns.tolist()[:10]}...")
+
+    print(f"   ✅ Features detected: {len(feature_cols)} dimensions.")
     X = df[feature_cols].values.astype(np.float32)
 
+    # --- 2. LABEL DETECTION (Annotators) ---
     y = None
-    if label_col:
-        y = df[label_col].values.astype(int)
+    if not is_train:
+        # Για το Custom Dataset, κάνουμε Majority Vote
+        y, method = calculate_majority_vote(df)
+
+        # Αν αποτύχει το Majority Vote, ψάχνουμε για κλασικό label
+        if y is None:
+            possible_labels = ['label', 'labels', 'target', 'is_clickbait']
+            label_col = next((c for c in possible_labels if c in df.columns), None)
+            if label_col:
+                y = df[label_col].values.astype(int)
+                print(f"   🏷️ Using existing label column: {label_col}")
+    else:
+        # Για το Train Dataset, ψάχνουμε το κλασικό label
+        possible_labels = ['label', 'labels', 'target']
+        label_col = next((c for c in possible_labels if c in df.columns), None)
+        if label_col:
+            y = df[label_col].values.astype(int)
 
     return X, y
 
 
 def recreate_scaler(train_path):
     print("\n⚖️  Ανακατασκευή StandardScaler από τα Training Data...")
-    X_train, _ = load_data(train_path)
+    # Φορτώνουμε μόνο τα features (is_train=True για να μην ψάχνει annotators)
+    X_train, _ = load_data(train_path, is_train=True)
 
     scaler = StandardScaler()
-    scaler.fit(X_train)  # Μαθαίνουμε το mean/std από το training set
+    scaler.fit(X_train)
     print("✅ Scaler fitted successfully!")
     return scaler
 
 
 def evaluate_models():
-    mlflow_helper.setup_mlflow(NEW_EXPERIMENT_NAME)
+    # Setup MLflow if available
+    if 'mlflow_helper' in sys.modules:
+        mlflow_helper.setup_mlflow(NEW_EXPERIMENT_NAME)
+    else:
+        try:
+            mlflow.set_experiment(NEW_EXPERIMENT_NAME)
+        except:
+            pass
 
-    # 1. Φόρτωση Gold Dataset (Raw)
-    print("\n--- Φόρτωση Δεδομένων ---")
-    X_gold_raw, y_gold = load_data(CUSTOM_DATA_PATH)
+    # 1. Φόρτωση Custom Dataset (Test set)
+    print("\n--- Φόρτωση Custom Dataset (Greek Annotations) ---")
+    X_gold_raw, y_gold = load_data(CUSTOM_DATA_PATH, is_train=False)
 
-    # 2. Δημιουργία Scaled έκδοσης του Gold Dataset
-    # Φορτώνουμε τα train data για να ρυθμίσουμε τον scaler
+    if y_gold is None:
+        print("❌ Σφάλμα: Δεν βρέθηκαν labels (NG, TK, KB) στο αρχείο!")
+        return
+
+    # 2. Δημιουργία Scaled έκδοσης
     scaler = recreate_scaler(TRAIN_DATA_PATH)
-    X_gold_scaled = scaler.transform(X_gold_raw)  # Εφαρμόζουμε το scaling στο Gold dataset
+
+    # Έλεγχος διαστάσεων
+    if X_gold_raw.shape[1] != scaler.n_features_in_:
+        print(f"❌ Mismatch dimensions! Train: {scaler.n_features_in_}, Custom: {X_gold_raw.shape[1]}")
+        print("   Πρέπει να ξανατρέξεις το UMAP στο custom dataset για να βγάλει 500 διαστάσεις.")
+        return
+
+    X_gold_scaled = scaler.transform(X_gold_raw)
 
     print(f"\n🚀 Έναρξη Αξιολόγησης {len(MODELS_TO_EVALUATE)} Μοντέλων...")
 
@@ -123,47 +214,69 @@ def evaluate_models():
             print(f"   ❌ Το αρχείο .pkl δεν βρέθηκε: {model_path}")
             continue
 
-        with mlflow.start_run(run_name=f"Eval_{model_name}"):
-            try:
-                # Φόρτωση μοντέλου
-                model = joblib.load(model_path)
+        try:
+            # Φόρτωση μοντέλου
+            model = joblib.load(model_path)
 
-                # Επιλογή σωστών δεδομένων (Scaled ή Raw)
-                if needs_scaling:
-                    print("   ⚖️  Using SCALED data (StandardScaler)")
-                    X_input = X_gold_scaled
-                else:
-                    print("   RAW Using RAW UMAP data (No Scaling)")
-                    X_input = X_gold_raw
+            # Επιλογή σωστών δεδομένων
+            if needs_scaling:
+                print("   ⚖️  Using SCALED data")
+                X_input = X_gold_scaled
+            else:
+                print("   RAW Using RAW data")
+                X_input = X_gold_raw
 
-                # Πρόβλεψη
-                preds = model.predict(X_input)
+            # Πρόβλεψη
+            preds = model.predict(X_input)
 
-                acc = accuracy_score(y_gold, preds)
-                f1 = f1_score(y_gold, preds)
+            # Metrics
+            acc = accuracy_score(y_gold, preds)
+            f1 = f1_score(y_gold, preds)
+            prec = precision_score(y_gold, preds, zero_division=0)
+            rec = recall_score(y_gold, preds, zero_division=0)
 
-                print(f"   📊 Accuracy: {acc:.4f} | F1: {f1:.4f}")
+            print(f"   📊 Acc: {acc:.4f} | F1: {f1:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f}")
 
+            # Log to MLflow
+            with mlflow.start_run(run_name=f"CustomEval_{model_name}"):
                 mlflow.log_param("model_name", model_name)
-                mlflow.log_param("data_scaling", "Scaled" if needs_scaling else "Raw")
+                mlflow.log_param("dataset", "Custom_Greek_Annotated")
 
-                mlflow_helper.evaluate_and_log_metrics(model, X_input, y_gold, prefix="gold")
+                mlflow.log_metric("custom_accuracy", acc)
+                mlflow.log_metric("custom_f1", f1)
+                mlflow.log_metric("custom_precision", prec)
+                mlflow.log_metric("custom_recall", rec)
 
-                results.append({"Model": model_name, "Accuracy": acc, "F1-Score": f1})
+                # Confusion Matrix Plot
+                cm = confusion_matrix(y_gold, preds)
+                plt.figure(figsize=(6, 5))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
+                plt.title(f"Confusion Matrix: {model_name}")
+                plt.ylabel('True Label (Annotators)')
+                plt.xlabel('Predicted Label')
+                plt.savefig(f"cm_{model_name}.png")
+                mlflow.log_artifact(f"cm_{model_name}.png")
+                plt.close()
 
-            except Exception as e:
-                print(f"   ❌ Σφάλμα: {e}")
+            results.append({
+                "Model": model_name,
+                "Accuracy": acc,
+                "F1-Score": f1,
+                "Precision": prec,
+                "Recall": rec
+            })
+
+        except Exception as e:
+            print(f"   ❌ Σφάλμα κατά την εκτέλεση: {e}")
 
     if results:
-        results_df = pd.DataFrame(results)
-        print("\n🏆 Συγκεντρωτικά Αποτελέσματα:")
-        print(results_df)
+        results_df = pd.DataFrame(results).sort_values(by="F1-Score", ascending=False)
+        print("\n🏆 Τελικά Αποτελέσματα στο Custom Dataset:")
+        print(results_df.to_string(index=False))
 
-        plt.figure(figsize=(10, 6))
-        sns.barplot(data=results_df, x="Model", y="F1-Score", palette="viridis")
-        plt.title("Σύγκριση Μοντέλων (F1 Score)")
-        plt.tight_layout()
-        plt.savefig("benchmark_results_rescaled.png")
+        # Save results to CSV for easy copy-paste
+        results_df.to_csv("custom_eval_results.csv", index=False)
+        print("\n✅ Τα αποτελέσματα αποθηκεύτηκαν στο 'custom_eval_results.csv'")
 
 
 if __name__ == "__main__":
