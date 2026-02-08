@@ -27,7 +27,7 @@ except ImportError:
 # ⚙️ ΡΥΘΜΙΣΕΙΣ ΧΡΗΣΤΗ
 # ==========================================
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# 1. Path του Gold Dataset (Test set)
+
 CUSTOM_DATA_PATH = PROJECT_ROOT / "data" / "clean" / "umap" / "custom_news_umap_500.parquet"
 TRAIN_DATA_PATH = PROJECT_ROOT / "data" / "clean" / "umap" / "train_umap_500.parquet"
 
