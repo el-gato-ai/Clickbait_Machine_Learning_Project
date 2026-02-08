@@ -1,0 +1,6 @@
+Model,Accuracy,F1-Score,Precision,Recall
+Gradient_Boosting,0.24736842105263157,0.39662447257383965,0.24736842105263157,1.0
+Logistic_Regression_NoScaling,0.7526315789473684,0.0,0.0,0.0
+SGD_Classifier,0.7526315789473684,0.0,0.0,0.0
+SVM_Scaled,0.7526315789473684,0.0,0.0,0.0
+Logistic_Regression_Scaled,0.7526315789473684,0.0,0.0,0.0

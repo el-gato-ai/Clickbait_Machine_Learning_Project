@@ -4,6 +4,7 @@ import seaborn as sns
 import time
 import numpy as np
 import os
+from pathlib import Path
 from sklearn.metrics import (accuracy_score, f1_score, precision_score, recall_score,
                              roc_auc_score, confusion_matrix, roc_curve,
                              average_precision_score, precision_recall_curve, log_loss, classification_report)
@@ -14,9 +15,10 @@ def setup_mlflow(experiment_name):
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
     mlruns_path = os.path.join(project_root, "mlruns")
 
-    mlflow.set_tracking_uri(f"file://{mlruns_path}")
+    tracking_uri = Path(mlruns_path).resolve().as_uri()
+    mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
-    print(f"🚀 MLflow tracking URI set to: {mlruns_path}")
+    print(f"🚀 MLflow tracking URI set to: {tracking_uri}")
     print(f"🚀 MLflow experiment set to: {experiment_name}")
 
 def log_optuna_trial(trial, params, metrics, model, run_name_prefix):

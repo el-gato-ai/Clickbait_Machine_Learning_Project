@@ -109,6 +109,7 @@ def load_data(path, is_train=False):
         df = pd.read_parquet(path, engine='pyarrow')
 
     # --- 1. FEATURE DETECTION ---
+    X = None
     # Ψάχνουμε για στήλες που ξεκινάνε με "umap_"
     feature_cols = [c for c in df.columns if str(c).startswith("umap_")]
 
@@ -131,10 +132,25 @@ def load_data(path, is_train=False):
         feature_cols = [c for c in df.columns if c not in exclude and pd.api.types.is_float_dtype(df[c])]
 
     if not feature_cols:
-        raise ValueError(f"❌ Δεν βρέθηκαν features (embeddings) στο αρχείο! Στήλες: {df.columns.tolist()[:10]}...")
+        embedding_col = next((c for c in ['embedding', 'embeddings', 'vector', 'vectors'] if c in df.columns), None)
+        if embedding_col:
+            try:
+                X = np.vstack(df[embedding_col].values).astype(np.float32)
+            except Exception:
+                try:
+                    import ast
+                    parsed = [ast.literal_eval(v) for v in df[embedding_col].values]
+                    X = np.vstack(parsed).astype(np.float32)
+                except Exception as e:
+                    raise ValueError(f"❌ Failed to parse embedding column '{embedding_col}': {e}")
+            print(f"   ✅ Features detected: {X.shape[1]} dimensions (from '{embedding_col}').")
 
-    print(f"   ✅ Features detected: {len(feature_cols)} dimensions.")
-    X = df[feature_cols].values.astype(np.float32)
+    if X is None:
+        if not feature_cols:
+            raise ValueError(f"❌ Δεν βρέθηκαν features (embeddings) στο αρχείο! Στήλες: {df.columns.tolist()[:10]}...")
+
+        print(f"   ✅ Features detected: {len(feature_cols)} dimensions.")
+        X = df[feature_cols].values.astype(np.float32)
 
     # --- 2. LABEL DETECTION (Annotators) ---
     y = None
@@ -205,7 +221,7 @@ def evaluate_models():
 
     for model_name, config in MODELS_TO_EVALUATE.items():
         model_path = config["path"]
-        needs_scaling = config["needs_scaling"]
+        needs_scaling = config.get("needs_scaling", True)
 
         print(f"\n🔍 Αξιολόγηση: {model_name} ...")
 
