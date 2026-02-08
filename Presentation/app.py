@@ -351,7 +351,7 @@ def main():
 def show_home():
     st.markdown('<div class="main-header">Ανίχνευση Clickbait</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">με χρήση Large Language Models & Τοπολογικής Ανάλυσης</div>', unsafe_allow_html=True)
-    
+
     st.markdown("---")
     
     # Introduction
@@ -803,6 +803,37 @@ def objective(trial):
 study = optuna.create_study(direction='maximize')
 study.optimize(objective, n_trials=50)
     """, language="python")
+
+    st.markdown("---")
+    # --- STEP 4: GREEK DATASET (NEW ADDITION) ---
+    st.markdown("### 4️⃣ Validation on Greek Data (Cross-Lingual Test)")
+
+    col_gr1, col_gr2 = st.columns(2)
+
+    with col_gr1:
+        st.markdown("""
+        <div class="metric-card" style="border-left: 5px solid #0099ff;">
+            <h4 style="color: #0099ff;">🇬🇷 Ελληνικό Annotated Dataset</h4>
+            <p>Ως τελικό βήμα επαλήθευσης, δημιουργήσαμε και σχολιάσαμε (annotate) χειροκίνητα 
+            ένα dataset με Ελληνικούς τίτλους.</p>
+            <h5>Η Διαδικασία:</h5>
+            <ol>
+                <li>Συλλογή τίτλων από ελληνικά Media & Blogs.</li>
+                <li><strong>Manual Annotation:</strong> Διαχωρισμός σε Clickbait/News από άνθρωπο.</li>
+                <li><strong>Zero-shot Testing:</strong> Εφαρμογή του μοντέλου (που εκπαιδεύτηκε στα Αγγλικά) απευθείας στα Ελληνικά.</li>
+            </ol>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_gr2:
+        st.markdown("""
+        <div class="insight-box">
+            <h4>🎯 Στόχος του Βήματος 4</h4>
+            <p>Να αποδείξουμε ότι το <strong>"Clickbaitiness"</strong> είναι διαγλωσσικό χαρακτηριστικό.</p>
+            <p>Εφόσον το <strong>Gemma LLM</strong> είναι multilingual, αναμέναμε ότι οι ελληνικοί clickbait τίτλοι 
+            θα προβάλλονται (μέσω UMAP) στο ίδιο "Clickbait Cluster" με τους αγγλικούς.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 def show_ml_algorithms():
     st.markdown("## 🤖 Οι Αλγόριθμοι Μηχανικής Μάθησης")
@@ -1677,6 +1708,45 @@ def show_results():
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
+
+    st.markdown("## 🇬🇷 Results on Greek Dataset")
+
+    st.markdown("""
+        Αξιολόγηση των μοντέλων (που εκπαιδεύτηκαν σε Αγγλικά δεδομένα) πάνω στο **Ελληνικό Custom Dataset**.
+        """)
+
+    # Δεδομένα από το αρχείο runs (1).csv
+    # Rank, Model, Config, F1, Accuracy, Precision, Recall, Time
+    data = [
+        ["🥇", "Gradient Boosting", "No Scaling", 0.3966, 0.2474, 0.2474, 1.0000, "246 ms"],
+        ["-", "Logistic Regression", "No Scaling", 0.0000, 0.7526, 0.0000, 0.0000, "127 ms"],
+        ["-", "SGD Classifier", "No Scaling", 0.0000, 0.7526, 0.0000, 0.0000, "126 ms"],
+        ["-", "Logistic Regression", "Scaled", 0.0000, 0.7526, 0.0000, 0.0000, "123 ms"],
+        ["-", "SVM (RBF)", "Scaled", 0.0000, 0.7526, 0.0000, 0.0000, "133 ms"]
+    ]
+
+    # Δημιουργία DataFrame
+    df_greek = pd.DataFrame(data, columns=[
+        "Rank", "Model", "Configuration", "F1 Score", "Accuracy", "Precision", "Recall", "Inference Time"
+    ])
+
+    # Styling Function
+    def highlight_greek(row):
+        # Το Gradient Boosting είναι το μόνο που βρήκε clickbait (έστω και επιθετικά)
+        if row['Model'] == 'Gradient Boosting':
+            return ['background-color: #2d5016; color: white; font-weight: bold'] * len(row)
+        else:
+            return ['background-color: #2b2b2b; color: #888888'] * len(row)
+
+    # Μορφοποίηση
+    styled_df = df_greek.style.apply(highlight_greek, axis=1).format({
+        'F1 Score': '{:.4f}',
+        'Accuracy': '{:.2%}',
+        'Precision': '{:.2%}',
+        'Recall': '{:.2%}'
+    })
+
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ========================================================================
     # MLFLOW INTEGRATION SECTION
