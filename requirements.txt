@@ -21,6 +21,6 @@ huggingface_hub
 tqdm
 umap-learn
 
-mlflow
+mlflow==3.8.1
 scikit-learn
 optuna
