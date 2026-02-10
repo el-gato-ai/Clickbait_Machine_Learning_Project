@@ -1897,11 +1897,11 @@ def show_results():
                 st.image(
                     img,
                     caption=f"{plot_type} - {run_names[selected_idx]} ({selected_run_id[:8]})",
-                    use_container_width=True
+                    use_container_width=False
                 )
                 
                 # Show run details in expander
-                with st.expander("📊 Run Details", expanded=False):
+                with st.expander("📊 Run Details", expanded=True):
                     metrics = get_run_metrics(selected_run_id, mlflow_uri)
                     params = get_run_params(selected_run_id, mlflow_uri)
                     
@@ -1938,9 +1938,6 @@ def show_results():
                 """)
                     
                 st.success("✅ Βλέπε το παραπάνω code snippet για integration!")
-
-        else:
-            st.warning("⚠️ Παρακαλώ εισάγετε MLflow URI")
     
     st.markdown("---")
     
@@ -2233,8 +2230,8 @@ def show_model_comparison():
 
     # Mapping Τύπων Γραφημάτων σε επιθέματα αρχείων
     plots_map = {
-        "Accuracy": "gold_accuracy.svg",
         "Training vs Inference Time": "output.png",
+        "Accuracy": "gold_accuracy.svg",
         "Average Precision": "gold_average_precision.svg",
         "F1": "gold_f1.svg",
         "Inference Time": "gold_inference_time_sec.svg",
